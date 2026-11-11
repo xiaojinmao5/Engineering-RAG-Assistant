@@ -12,7 +12,11 @@ st.caption("基于本地规范知识库的 RAG 问答系统")
 # 使用缓存，避免每次刷新网页都重新切分
 @st.cache_data
 def load_data():
-    with open("data/规范.txt", "r", encoding="utf-8") as f:
+   def load_data():
+    # 获取当前 app.py 所在的绝对路径
+    current_dir = os.path.dirname(__file__)
+    file_path = os.path.join(current_dir, "data", "规范.txt")
+    with open(file_path, "r", encoding="utf-8") as f:
         text = f.read()
     chunks = re.split(r'(?=第[一二三四五六七八九十百\d]+条)', text)
     return [c.strip() for c in chunks if c.strip()]
