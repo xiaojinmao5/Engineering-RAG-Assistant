@@ -105,6 +105,4 @@ if user_question:
                 except Exception as e:
                     st.error(f"模型调用失败: {e}")
                 
-                with st.expander("📚 查看引用的规范原文"):
-                    for i, chunk in enumerate(retrieved_chunks):
-                        st.info(f"**参考片段 {i+1}：**\n{chunk}")
+            
