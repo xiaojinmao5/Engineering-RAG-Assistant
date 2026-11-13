@@ -43,7 +43,7 @@ def load_data():
         return []
         
     # 把所有的文字合并后，统一进行正则切分
-chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+条)', all_text)
+    chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+条)', all_text)
     return [c.strip() for c in chunks if c.strip()]
 
 clean_chunks = load_data()
