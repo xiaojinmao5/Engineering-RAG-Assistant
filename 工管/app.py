@@ -51,6 +51,9 @@ clean_chunks = load_data()
 # 在网页上显示加载状态
 if len(clean_chunks) > 0:
     st.success(f"✅ 知识库加载成功！共识别出 {len(clean_chunks)} 个条款片段。")
+    with st.expander("🕵️‍♂️ 透视镜：看看系统到底读到了什么"):
+        for i, c in enumerate(clean_chunks[:10]): 
+            st.write(f"**片段{i+1}:** {c[:100]}...") 
 else:
     st.warning("⚠️ 知识库为空，请检查 data 文件夹下是否有 txt 或 pdf 文件。")
 
