@@ -3,7 +3,7 @@ import re
 import streamlit as st
 from openai import OpenAI
 import chromadb
-from chromadb.utils import embedding_functions
+from zhipuai import ZhipuAI
 
 st.set_page_config(page_title="工程规范助手", page_icon="🏗️")
 st.title("🏗️ 工程规范与流程智能助手 (语义检索版)")
@@ -46,20 +46,33 @@ def load_data():
 
 clean_chunks = load_data()
 
-# ================= 2. 初始化向量数据库 =================
-# 必须在 Streamlit 的 Secrets 里配置 ZHIPU_API_KEY
+# ================= 2. 自定义智谱 Embedding 函数 =================
+class ZhipuEmbeddingFunction:
+    def __init__(self):
+        self.client = ZhipuAI(api_key=os.environ.get("ZHIPU_API_KEY"))
+        self.model_name = "embedding-3"
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        # Chroma 要求输入是字符串列表，输出是向量列表
+        resp = self.client.embeddings.create(
+            model=self.model_name,
+            input=input
+        )
+        return [d.embedding for d in resp.data]
+
+    def name(self) -> str:
+        return f"zhipuai/{self.model_name}"
+
+    def get_config(self) -> dict:
+        return {"model": self.model_name}
+
+# ================= 3. 初始化向量数据库 =================
 @st.cache_resource
 def get_chroma_collection(chunks):
     if not chunks:
         return None
         
-    # 使用智谱免费的 Embedding 模型
-    zhipu_ef = embedding_functions.ZhipuEmbeddingFunction(
-        api_key=os.environ.get("ZHIPU_API_KEY"),
-        model_name="embedding-2"
-    )
-    
-    # 使用内存模式的 Chroma（每次刷新重新建库，适合免费云端演示）
+    # 使用内存模式的 Chroma
     client = chromadb.Client()
     
     # 为了避免同名冲突，每次清空重建
@@ -70,7 +83,7 @@ def get_chroma_collection(chunks):
         
     collection = client.create_collection(
         name="engineering_rules", 
-        embedding_function=zhipu_ef
+        embedding_function=ZhipuEmbeddingFunction() # 调用上面自定义的类
     )
     
     # 将文档存入向量库（自动向量化）
@@ -89,7 +102,7 @@ else:
     st.warning("⚠️ 知识库为空，请检查 data 文件夹。")
 
 
-# ================= 3. 页面交互 =================
+# ================= 4. 页面交互与检索 =================
 user_question = st.chat_input("请输入你的工程问题...")
 
 if user_question:
@@ -98,7 +111,7 @@ if user_question:
     with st.chat_message("assistant"):
         with st.spinner("正在理解语义并检索规范..."):
             if collection:
-                # 向量检索：查最相似的 3 条（不管字面有没有重合）
+                # 向量检索：查最相似的 3 条
                 results = collection.query(
                     query_texts=[user_question],
                     n_results=3
