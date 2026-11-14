@@ -47,9 +47,10 @@ def load_data():
                 pass
     if not all_text.strip():
         return []
-   chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', all_text)
+        
+    # 使用正则表达式按“第X条”或“第X章”切分
+    chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', all_text)
     return [c.strip() for c in chunks if len(c.strip()) > 10]
-
 clean_chunks = load_data()
 
 # ================= 2. 自定义智谱 Embedding 函数 =================
