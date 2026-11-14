@@ -17,9 +17,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 主界面标题（去掉“语义检索版”几个字，用 caption 代替）
+# 主界面标题
 st.title("🏗️ 工程规范与流程智能助手")
-
 
 # ================= 1. 读取文件并切分 =================
 @st.cache_data
@@ -47,10 +46,10 @@ def load_data():
                 pass
     if not all_text.strip():
         return []
-        
     # 使用正则表达式按“第X条”或“第X章”切分
     chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', all_text)
     return [c.strip() for c in chunks if len(c.strip()) > 10]
+
 clean_chunks = load_data()
 
 # ================= 2. 自定义智谱 Embedding 函数 =================
@@ -118,7 +117,8 @@ with st.sidebar:
 
 
 # ================= 5. 主界面交互与检索 =================
-user_question = st.chat_input("请输入你的工程问题...")
+# 【这里就是修改的地方！固定显示高级问题】
+user_question = st.chat_input("例如：哪些建设工程必须实行强制监理？")
 
 if user_question:
     st.chat_message("user").write(user_question)
