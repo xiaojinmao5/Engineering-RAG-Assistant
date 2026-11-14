@@ -2,85 +2,117 @@ import os
 import re
 import streamlit as st
 from openai import OpenAI
-from pypdf import PdfReader # 引入解析 PDF 的工具
+import chromadb
+from chromadb.utils import embedding_functions
 
 st.set_page_config(page_title="工程规范助手", page_icon="🏗️")
-st.title("🏗️ 工程规范与流程智能助手")
+st.title("🏗️ 工程规范与流程智能助手 (语义检索版)")
 
+# ================= 1. 读取文件并切分 =================
 @st.cache_data
 def load_data():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(current_dir, "data")
     
     all_text = ""
-    
-    # 如果连 data 文件夹都没有，直接返回
     if not os.path.exists(data_dir):
-        st.error(f"❌ 找不到 data 文件夹！路径：{data_dir}")
         return []
         
-    # 遍历 data 文件夹里的所有文件
     for filename in os.listdir(data_dir):
         file_path = os.path.join(data_dir, filename)
         
-        # 如果是 txt 文件
+        if filename == "guifan.pdf": # 跳过之前的乱码PDF
+            continue
+            
         if filename.endswith(".txt"):
             with open(file_path, "r", encoding="utf-8") as f:
                 all_text += f.read() + "\n"
-                
-        # 如果是 pdf 文件
         elif filename.endswith(".pdf"):
             try:
+                from pypdf import PdfReader
                 reader = PdfReader(file_path)
                 for page in reader.pages:
                     text = page.extract_text()
-                    if text:
-                        all_text += text + "\n"
-            except Exception as e:
-                st.warning(f"⚠️ 读取 PDF 文件 {filename} 失败: {e}")
+                    if text: all_text += text + "\n"
+            except Exception:
+                pass
                 
     if not all_text.strip():
         return []
         
-    # 把所有的文字合并后，统一进行正则切分
-    chunks = re.split(r'(?=(?:第[一二三四五六七八九十百\d\.]+条)|(?:[A-Z]\.\d+\.\d+))', all_text)
-    return [c.strip() for c in chunks if c.strip()]
+    # 使用正则表达式按“第X条”切分
+    chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+条)', all_text)
+    return [c.strip() for c in chunks if len(c.strip()) > 10] # 过滤掉太短的碎片
 
 clean_chunks = load_data()
 
-# 在网页上显示加载状态
-if len(clean_chunks) > 0:
-    st.success(f"✅ 知识库加载成功！共识别出 {len(clean_chunks)} 个条款片段。")
-    with st.expander("🕵️‍♂️ 透视镜：看看系统到底读到了什么"):
-        for i, c in enumerate(clean_chunks[:10]): 
-            st.write(f"**片段{i+1}:** {c[:100]}...") 
+# ================= 2. 初始化向量数据库 =================
+# 必须在 Streamlit 的 Secrets 里配置 ZHIPU_API_KEY
+@st.cache_resource
+def get_chroma_collection(chunks):
+    if not chunks:
+        return None
+        
+    # 使用智谱免费的 Embedding 模型
+    zhipu_ef = embedding_functions.ZhipuEmbeddingFunction(
+        api_key=os.environ.get("ZHIPU_API_KEY"),
+        model_name="embedding-2"
+    )
+    
+    # 使用内存模式的 Chroma（每次刷新重新建库，适合免费云端演示）
+    client = chromadb.Client()
+    
+    # 为了避免同名冲突，每次清空重建
+    try:
+        client.delete_collection(name="engineering_rules")
+    except:
+        pass
+        
+    collection = client.create_collection(
+        name="engineering_rules", 
+        embedding_function=zhipu_ef
+    )
+    
+    # 将文档存入向量库（自动向量化）
+    ids = [str(i) for i in range(len(chunks))]
+    collection.add(
+        documents=chunks,
+        ids=ids
+    )
+    return collection
+
+collection = get_chroma_collection(clean_chunks)
+
+if collection and len(clean_chunks) > 0:
+    st.success(f"✅ 语义知识库加载成功！共建立 {len(clean_chunks)} 个向量索引。")
 else:
-    st.warning("⚠️ 知识库为空，请检查 data 文件夹下是否有 txt 或 pdf 文件。")
+    st.warning("⚠️ 知识库为空，请检查 data 文件夹。")
 
-def search(query, top_k=3): # 稍微增加返回的数量
-    query_chars = set(query) 
-    scores = []
-    for chunk in clean_chunks:
-        score = sum(1 for char in query_chars if char in chunk)
-        scores.append((score, chunk))
-    scores.sort(key=lambda x: x[0], reverse=True)
-    # 过滤掉得分为 0 的完全无关片段（如果有的话）
-    return [item[1] for item in scores[:top_k] if item[0] > 0]
 
+# ================= 3. 页面交互 =================
 user_question = st.chat_input("请输入你的工程问题...")
 
 if user_question:
     st.chat_message("user").write(user_question)
     
     with st.chat_message("assistant"):
-        with st.spinner("正在检索规范并思考..."):
-            retrieved_chunks = search(user_question, top_k=3)
-            
+        with st.spinner("正在理解语义并检索规范..."):
+            if collection:
+                # 向量检索：查最相似的 3 条（不管字面有没有重合）
+                results = collection.query(
+                    query_texts=[user_question],
+                    n_results=3
+                )
+                retrieved_chunks = results['documents'][0]
+            else:
+                retrieved_chunks = []
+                
             if not retrieved_chunks:
-                st.write("未在知识库中找到相关规范，请尝试换个问法。")
+                st.write("未在知识库中找到相关规范。")
             else:
                 context = "\n\n".join(retrieved_chunks)
                 
+                # 调用 DeepSeek 生成回答
                 client = OpenAI(
                     api_key=os.environ.get("DEEPSEEK_API_KEY"),
                     base_url="https://api.deepseek.com"
@@ -88,7 +120,7 @@ if user_question:
                 
                 prompt = f"""你是一个专业的工程管理助手。
 请只根据以下【参考规范】回答用户的问题。如果规范中没有答案，请回答“未在知识库中找到”。
-回答完毕后，请务必在末尾加上引用来源。
+回答完毕后，请务必在末尾加上引用来源（具体到第X条）。
 
 【参考规范】
 {context}
@@ -105,4 +137,6 @@ if user_question:
                 except Exception as e:
                     st.error(f"模型调用失败: {e}")
                 
-            
+                with st.expander("📚 查看语义检索到的规范原文"):
+                    for i, chunk in enumerate(retrieved_chunks):
+                        st.info(f"**参考片段 {i+1}：**\n{chunk}")
