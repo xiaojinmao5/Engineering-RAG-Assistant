@@ -47,7 +47,7 @@ def load_data():
                 pass
     if not all_text.strip():
         return []
-    chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+条)', all_text)
+   chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', all_text)
     return [c.strip() for c in chunks if len(c.strip()) > 10]
 
 clean_chunks = load_data()
