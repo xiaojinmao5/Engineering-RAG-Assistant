@@ -5,9 +5,23 @@ from openai import OpenAI
 import chromadb
 from zhipuai import ZhipuAI
 
-st.set_page_config(page_title="工程规范助手", page_icon="🏗️")
-st.title("🏗️ 工程规范与流程智能助手 (语义检索版)")
+# ================= 0. 页面基础设置与美化 =================
+st.set_page_config(page_title="工程规范助手", page_icon="🏗️", layout="wide")
 
+# 注入 CSS，隐藏右上角的菜单和底部的 Streamlit 水印
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .block-container {padding-top: 2rem;}
+</style>
+""", unsafe_allow_html=True)
+
+# 主界面标题（去掉“语义检索版”几个字，用 caption 代替）
+st.title("🏗️ 工程规范与流程智能助手")
+st.caption("✨ 基于 DeepSeek 与语义向量检索的垂直领域问答系统")
+
+# ================= 1. 读取文件并切分 =================
 @st.cache_data
 def load_data():
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +52,7 @@ def load_data():
 
 clean_chunks = load_data()
 
+# ================= 2. 自定义智谱 Embedding 函数 =================
 class ZhipuEmbeddingFunction:
     def __init__(self):
         self.client = ZhipuAI(api_key=os.environ.get("ZHIPU_API_KEY"))
@@ -50,6 +65,7 @@ class ZhipuEmbeddingFunction:
     def get_config(self) -> dict:
         return {"model": self.model_name}
 
+# ================= 3. 初始化向量数据库 =================
 @st.cache_resource
 def get_chroma_collection(chunks):
     if not chunks:
@@ -74,11 +90,33 @@ def get_chroma_collection(chunks):
 
 collection = get_chroma_collection(clean_chunks)
 
-if collection and len(clean_chunks) > 0:
-    st.success(f"✅ 语义知识库加载成功！共建立 {len(clean_chunks)} 个向量索引。")
-else:
-    st.warning("⚠️ 知识库为空，请检查 data 文件夹。")
+# ================= 4. 渲染左侧侧边栏 =================
+with st.sidebar:
+    st.header("⚙️ 系统控制台")
+    
+    if collection and len(clean_chunks) > 0:
+        st.success(f"✅ 知识库就绪：{len(clean_chunks)} 个片段")
+    else:
+        st.error("❌ 知识库加载失败")
+        
+    st.markdown("---")
+    
+    # 把透视镜放到侧边栏
+    with st.expander("🕵️‍♂️ 透视镜：查看系统切分的规范"):
+        if clean_chunks:
+            for i, c in enumerate(clean_chunks[:10]): # 只展示前10个防卡顿
+                st.caption(f"**片段 {i+1}:** {c[:50]}...")
+        else:
+            st.write("暂无数据")
+            
+    st.markdown("---")
+    st.caption("💡 **技术栈**")
+    st.caption("LLM: DeepSeek API")
+    st.caption("Embedding: 智谱 embedding-3")
+    st.caption("Vector DB: ChromaDB")
 
+
+# ================= 5. 主界面交互与检索 =================
 user_question = st.chat_input("请输入你的工程问题...")
 
 if user_question:
@@ -86,7 +124,6 @@ if user_question:
     with st.chat_message("assistant"):
         with st.spinner("正在理解语义并检索规范..."):
             if collection:
-                # 【核心修复】手动计算查询向量
                 embedding_func = ZhipuEmbeddingFunction()
                 query_vector = embedding_func([user_question])
                 results = collection.query(
@@ -107,12 +144,13 @@ if user_question:
                 client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
                 prompt = f"""你是一个专业的工程管理助手。请只根据以下【参考规范】回答用户的问题。如果规范中没有答案，请回答“未在知识库中找到”。回答完毕后，务必在末尾加上引用来源（具体到第X条）。
 【参考规范】\n{context}\n【用户问题】\n{user_question}"""
+                
                 try:
                     response = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}])
                     st.write(response.choices[0].message.content)
                 except Exception as e:
                     st.error(f"模型调用失败: {e}")
                 
-                with st.expander("📚 查看语义检索到的规范原文"):
+                with st.expander("📚 查看语义检索到的原文依据"):
                     for i, chunk in enumerate(retrieved_chunks):
                         st.info(f"**参考片段 {i+1}：**\n{chunk}")
