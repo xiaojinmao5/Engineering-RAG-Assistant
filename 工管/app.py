@@ -21,7 +21,7 @@ def load_data():
     for filename in os.listdir(data_dir):
         file_path = os.path.join(data_dir, filename)
         
-        if filename == "guifan.pdf": # 跳过之前的乱码PDF
+        if filename == "guifan.pdf": # 跳过乱码PDF
             continue
             
         if filename.endswith(".txt"):
@@ -42,7 +42,7 @@ def load_data():
         
     # 使用正则表达式按“第X条”切分
     chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+条)', all_text)
-    return [c.strip() for c in chunks if len(c.strip()) > 10] # 过滤掉太短的碎片
+    return [c.strip() for c in chunks if len(c.strip()) > 10]
 
 clean_chunks = load_data()
 
@@ -65,13 +65,14 @@ class ZhipuEmbeddingFunction:
     def get_config(self) -> dict:
         return {"model": self.model_name}
 
-# ================= 3. 初始化向量数据库 (修复分批发送) =================
+# ================= 3. 初始化向量数据库 =================
 @st.cache_resource
 def get_chroma_collection(chunks):
     if not chunks:
         return None
         
-    client = chromadb.Client()
+    # 使用最新推荐的 EphemeralClient 模式
+    client = chromadb.EphemeralClient()
     
     try:
         client.delete_collection(name="engineering_rules")
@@ -83,7 +84,7 @@ def get_chroma_collection(chunks):
         embedding_function=ZhipuEmbeddingFunction() 
     )
     
-    # 【核心修复】分批将文档存入向量库，每次最多 64 条
+    # 分批入库（智谱限制单次最多 64 条）
     ids = [str(i) for i in range(len(chunks))]
     batch_size = 64
     for i in range(0, len(chunks), batch_size):
@@ -113,11 +114,12 @@ if user_question:
     with st.chat_message("assistant"):
         with st.spinner("正在理解语义并检索规范..."):
             if collection:
+                # 【核心修复】使用新版 Chroma 的 .documents 属性读取方式
                 results = collection.query(
                     query_texts=[user_question],
                     n_results=3
                 )
-                retrieved_chunks = results['documents'][0]
+                retrieved_chunks = results['documents'][0] if results['documents'] else []
             else:
                 retrieved_chunks = []
                 
