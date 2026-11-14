@@ -53,7 +53,6 @@ class ZhipuEmbeddingFunction:
         self.model_name = "embedding-3"
 
     def __call__(self, input: list[str]) -> list[list[float]]:
-        # Chroma 要求输入是字符串列表，输出是向量列表
         resp = self.client.embeddings.create(
             model=self.model_name,
             input=input
@@ -66,16 +65,14 @@ class ZhipuEmbeddingFunction:
     def get_config(self) -> dict:
         return {"model": self.model_name}
 
-# ================= 3. 初始化向量数据库 =================
+# ================= 3. 初始化向量数据库 (修复分批发送) =================
 @st.cache_resource
 def get_chroma_collection(chunks):
     if not chunks:
         return None
         
-    # 使用内存模式的 Chroma
     client = chromadb.Client()
     
-    # 为了避免同名冲突，每次清空重建
     try:
         client.delete_collection(name="engineering_rules")
     except:
@@ -83,15 +80,20 @@ def get_chroma_collection(chunks):
         
     collection = client.create_collection(
         name="engineering_rules", 
-        embedding_function=ZhipuEmbeddingFunction() # 调用上面自定义的类
+        embedding_function=ZhipuEmbeddingFunction() 
     )
     
-    # 将文档存入向量库（自动向量化）
+    # 【核心修复】分批将文档存入向量库，每次最多 64 条
     ids = [str(i) for i in range(len(chunks))]
-    collection.add(
-        documents=chunks,
-        ids=ids
-    )
+    batch_size = 64
+    for i in range(0, len(chunks), batch_size):
+        batch_docs = chunks[i : i + batch_size]
+        batch_ids = ids[i : i + batch_size]
+        collection.add(
+            documents=batch_docs,
+            ids=batch_ids
+        )
+        
     return collection
 
 collection = get_chroma_collection(clean_chunks)
@@ -111,7 +113,6 @@ if user_question:
     with st.chat_message("assistant"):
         with st.spinner("正在理解语义并检索规范..."):
             if collection:
-                # 向量检索：查最相似的 3 条
                 results = collection.query(
                     query_texts=[user_question],
                     n_results=3
@@ -125,7 +126,6 @@ if user_question:
             else:
                 context = "\n\n".join(retrieved_chunks)
                 
-                # 调用 DeepSeek 生成回答
                 client = OpenAI(
                     api_key=os.environ.get("DEEPSEEK_API_KEY"),
                     base_url="https://api.deepseek.com"
