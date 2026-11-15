@@ -6,9 +6,24 @@ import chromadb
 from zhipuai import ZhipuAI
 import jieba
 
-# ================= 0. 页面与侧边栏 =================
+# ================= 0. 页面与全局 CSS =================
 st.set_page_config(page_title="工程规范智能助手", page_icon="🏗️", layout="wide")
-st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
+
+# 注入 CSS：隐藏默认菜单，微调侧边栏和聊天气泡的间距，让它看起来更精致
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    /* 侧边栏字体略微缩小，显得更精致 */
+    [data-testid="stSidebar"] { font-size: 14px; }
+    /* 历史记录面板的样式 */
+    .history-item { margin-bottom: 8px; padding: 8px; border-radius: 6px; font-size: 13px; line-height: 1.4; }
+    .history-user { background-color: #f0f2f6; color: #333; }
+    .history-assistant { background-color: #e8f4f8; color: #333; }
+    .history-role { font-weight: bold; font-size: 12px; margin-bottom: 4px; display: block; opacity: 0.7;}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🏗️ 工程规范与流程智能助手")
 
 # ================= 1. 读取与切分 =================
@@ -87,38 +102,40 @@ def hybrid_search(query, k=3):
     final_scores.sort(key=lambda x: x[0], reverse=True)
     return [item[1] for item in final_scores[:k]]
 
-# ================= 5. 多轮对话记忆管理与侧边栏 =================
+# ================= 5. 侧边栏与记忆管理 =================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 with st.sidebar:
-    st.header("⚙️ 系统控制台")
+    st.caption("⚙️ **系统控制台**")
     st.success(f"✅ 知识库就绪：{len(clean_chunks)} 个片段")
     
     # 1. 清空按钮
-    if st.button("🗑️ 清空对话记忆"):
+    if st.button("🗑️ 清空对话记忆", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
         
-    # 2. 【你要的直观历史记忆面板】
+    st.divider()
+    
+    # 2. 【美化版】历史记忆回顾
     with st.expander("📜 历史记忆回顾", expanded=False):
         if st.session_state.messages:
             for msg in st.session_state.messages:
                 if msg["role"] == "user":
-                    st.markdown(f"🙋‍♂️ **你**: {msg['content']}")
+                    st.markdown(f'<div class="history-item history-user"><span class="history-role">🙋‍♂️ 你</span>{msg["content"]}</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f"🤖 **助手**: {msg['content']}")
+                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">🤖 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
         else:
-            st.caption("当前还没有聊天记录哦~")
+            st.caption("暂无历史记录~")
             
-    st.markdown("---")
+    st.divider()
     
-    # 3. 架构配置
-    st.markdown("### 💡 架构配置")
-    st.markdown("- **大语言模型**: DeepSeek-chat")
-    st.markdown("- **向量模型**: 智谱 embedding-3")
-    st.markdown("- **数据仓库**: ChromaDB")
-    st.markdown("- **检索策略**: 混合检索 (向量+BM25)")
+    # 3. 【美化版】架构配置（使用小字号）
+    st.caption("💡 **架构配置**")
+    st.caption("• LLM: DeepSeek-chat")
+    st.caption("• Embedding: 智谱 embedding-3")
+    st.caption("• DB: ChromaDB")
+    st.caption("• 检索: 混合检索 (向量+BM25)")
 
 # --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
@@ -130,7 +147,6 @@ for msg in st.session_state.messages:
 
 # ================= 6. 主界面交互 =================
 if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
-    # 1. 记录并展示用户提问
     st.session_state.messages.append({"role": "user", "content": user_question})
     st.chat_message("user").write(user_question)
     
@@ -138,26 +154,22 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
         with st.spinner("正在理解上下文并检索..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
-            # 【核心：查询重写 (Query Rewriting)】
+            # 查询重写
             search_query = user_question
             if len(st.session_state.messages) > 1:
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
-                rewrite_prompt = f"""根据以下历史对话，将用户的最新追问改写为一个完整独立的搜索查询句子。直接输出改写后的问题，不要任何解释。
-历史对话：
-{history}
-最新追问：{user_question}"""
+                rewrite_prompt = f"根据历史对话，将最新追问改写为独立搜索句，直接输出问题。\n历史对话：\n{history}\n最新追问：{user_question}"
                 try:
                     rw_res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": rewrite_prompt}])
                     search_query = rw_res.choices[0].message.content.strip()
                     st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
-                except Exception:
-                    pass
+                except Exception: pass
             
-            # 2. 混合检索
+            # 混合检索
             retrieved_chunks = hybrid_search(search_query)
             context = "\n\n".join(retrieved_chunks)
             
-            # 3. 构建 Prompt
+            # 构建 Prompt
             history_text = ""
             for msg in st.session_state.messages[-5:-1]:
                 history_text += f"{'用户' if msg['role'] == 'user' else '助手'}: {msg['content']}\n"
@@ -176,13 +188,10 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
 {search_query}
 """
             try:
-                # 4. 开启流式输出
+                # 流式输出
                 response = client.chat.completions.create(
-                    model="deepseek-chat", 
-                    messages=[{"role": "user", "content": prompt}],
-                    stream=True
+                    model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=True
                 )
-                
                 def stream_generator():
                     for chunk in response:
                         if chunk.choices[0].delta.content:
