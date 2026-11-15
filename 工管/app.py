@@ -99,7 +99,14 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
     st.markdown("---")
-    
+        # 【新增：查看底层记忆功能】
+    with st.expander("🧠 透视：查看系统底层记忆 (JSON)"):
+        if st.session_state.messages:
+            st.json(st.session_state.messages) # 把记忆列表变成好看的 JSON 格式
+        else:
+            st.caption("当前没有对话记忆")
+            
+    st.markdown("---")
     # 架构配置（替换了原来的 caption）
     st.markdown("### 💡 架构配置")
     st.markdown("- **大语言模型**: DeepSeek-chat")
