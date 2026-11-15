@@ -14,22 +14,26 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stSidebar"] { font-size: 14px; }
-    .history-item { margin-bottom: 8px; padding: 8px; border-radius: 6px; font-size: 13px; line-height: 1.4; }
-    .history-user { background-color: #F3F4F6; color: #1F2937; border-left: 3px solid #2563EB; }
-    .history-assistant { background-color: #F0F9FF; color: #1F2937; border-left: 3px solid #0EA5E9; }
-    .history-role { font-weight: bold; font-size: 12px; margin-bottom: 4px; display: block; opacity: 0.7;}
-    /* 强制缩小默认头像尺寸 */
-    [data-testid="stChatMessage"] img { width: 28px; height: 28px; }
+    
+    /* 极简线框风历史记录 */
+    .history-item { margin-bottom: 12px; padding: 8px 0 8px 10px; font-size: 13px; line-height: 1.5; }
+    .history-user { border-left: 2px solid #9CA3AF; color: #374151; }
+    .history-assistant { border-left: 2px solid #3B82F6; color: #374151; }
+    .history-role { font-weight: 600; font-size: 12px; margin-bottom: 4px; display: block; color: #6B7280; }
+    
+    /* 强制调整默认头像的尺寸，不拉伸 */
+    [data-testid="stChatMessage"] img { width: 32px; height: 32px; object-fit: contain; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手")
 
-# 【新增：极简纯色 SVG 头像】
-# 深蓝色用户头像 (白底人像)
-USER_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTIiIGZpbGw9IiMyNTYzRUIiIC8+PHBhdGggZD0iTTEyIDEyYzIuMjEgMCA0LTEuNzkgNC00cy0xLjc5LTQtNC00LTQgMS43OS00IDQgMS43OSA0IDQgNHptMCAyYy0yLjY3IDAtOCAxLjM0LTggNHYyaDE2di0yYzAtMi42Ni01LjMzLTQtOC00eiIvPjwvc3ZnPg=="
-# 科技蓝 AI 头像 (白底机器人)
-AI_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTIiIGZpbGw9IiMwRUE1RTkiIC8+PHBhdGggZD0iTTEyIDJhMiAyIDAgMCAxIDIgMmMwIC43NC0uNCAxLjM5LTEgMS43M1Y3aDNhNSA1IDAgMCAxIDUgNXY1YTIgMiAwIDAgMS0yIDJINWEyIDIgMCAwIDEtMi0ydi01YTUgNSAwIDAgMSA1LTVoM1Y1LjczQTIgMiAwIDAgMSAxMiAyei03IDloMnYySDd2LTJ6bTggMGgydjJoLTJ2LTJ6bS01IDRoNHYyaC00di0yeiIvPjwvc3ZnPg=="
+# 【新增：极简线框 SVG 头像】
+# 深灰色线框人像 (Feather User Icon)
+USER_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0QjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgMjF2LTJhNCA0IDAgMCAwLTQtNEg4YTQgNCAwIDAgMC00IDR2MiI+PC9wYXRoPjxjaXJjbGUgY3g9IjEyIiBjeT0iNyIgcj0iNCI+PC9jaXJjbGU+PC9zdmc+"
+
+# 蓝色线框机器人 (Feather Bot Icon)
+AI_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMyNTYzRUIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIxMSIgd2lkdGg9IjE4IiBoZWlnaHQ9IjEwIiByeD0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjEyIiBjeT0iNSIgcj0iMiI+PC9jaXJjbGU+PHBhdGggZD0iTTEyIDd2NCI+PC9wYXRoPjxsaW5lIHgxPSI4IiB5MT0iMTYiIHgyPSI4IiB5Mj0iMTYiPjwvbGluZT48bGluZSB4MT0iMTYiIHkxPSIxNiIgeDI9IjE2IiB5Mj0iMTYiPjwvbGluZT48L3N2Zz4="
 
 # ================= 1. 读取与切分 =================
 @st.cache_data
@@ -124,9 +128,9 @@ with st.sidebar:
         if st.session_state.messages:
             for msg in st.session_state.messages:
                 if msg["role"] == "user":
-                    st.markdown(f'<div class="history-item history-user"><span class="history-role">👤 用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="history-item history-user"><span class="history-role">用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">🤖 AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
         else:
             st.caption("暂无历史记录~")
             
@@ -142,7 +146,7 @@ with st.sidebar:
 if len(st.session_state.messages) == 0:
     st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题，我会给出准确的法条依据。")
 
-# 【替换头像：渲染主界面历史对话】
+# 渲染主界面历史对话
 for msg in st.session_state.messages:
     avatar_img = USER_AVATAR if msg["role"] == "user" else AI_AVATAR
     st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
@@ -150,10 +154,8 @@ for msg in st.session_state.messages:
 # ================= 6. 主界面交互 =================
 if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
     st.session_state.messages.append({"role": "user", "content": user_question})
-    # 【替换头像：当前用户提问】
     st.chat_message("user", avatar=USER_AVATAR).write(user_question)
     
-    # 【替换头像：当前 AI 回答】
     with st.chat_message("assistant", avatar=AI_AVATAR):
         with st.spinner("正在理解上下文并检索..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
