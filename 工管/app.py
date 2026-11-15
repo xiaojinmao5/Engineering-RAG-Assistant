@@ -5,7 +5,6 @@ from openai import OpenAI
 import chromadb
 from zhipuai import ZhipuAI
 import jieba
-import math
 
 # ================= 0. 页面与侧边栏 =================
 st.set_page_config(page_title="工程规范智能助手", page_icon="🏗️", layout="wide")
@@ -65,29 +64,28 @@ def get_chroma_collection(chunks):
 
 collection = get_chroma_collection(clean_chunks)
 
-# ================= 4. 混合检索算法 (核心升级点) =================
-# 原理：结合“向量相似度”和“关键词重合度”共同打分
+# ================= 4. 混合检索算法 =================
 def hybrid_search(query, k=3):
     if not collection or not clean_chunks: return []
     
-    # 1. 关键词打分 (BM25 简化版：统计词频)
-    jieba.load_userdict(['渗漏', '防渗漏', '保修期', '强制监理']) # 补充工程词典
+    # 补充工程专属词典，防止被分词切碎
+    jieba.add_word('防渗漏')
+    jieba.add_word('保修期')
+    jieba.add_word('强制监理')
+    
     query_words = list(jieba.cut(query))
     kw_scores = {}
     for idx, chunk in enumerate(clean_chunks):
         score = sum(1 for word in query_words if word in chunk)
         kw_scores[str(idx)] = score
         
-    # 2. 向量打分
     query_vector = ZhipuEmbeddingFunction()([query])
-    vector_results = collection.query(query_embeddings=query_vector, n_results=10) # 先召回前10个
+    vector_results = collection.query(query_embeddings=query_vector, n_results=10)
     vector_ids = vector_results['ids'][0]
     
-    # 3. 综合打分排序
     final_scores = []
     for vid in vector_ids:
-        # 向量得分权重 0.7，关键词得分权重 0.3
-        v_score = 1.0 / (vector_ids.index(vid) + 1) # 排名越靠前分越高
+        v_score = 1.0 / (vector_ids.index(vid) + 1) 
         k_score = kw_scores.get(vid, 0) / max(max(kw_scores.values()), 1)
         combined_score = 0.7 * v_score + 0.3 * k_score
         final_scores.append((combined_score, clean_chunks[int(vid)]))
@@ -106,6 +104,10 @@ with st.sidebar:
     if st.button("🗑️ 清空对话记忆"):
         st.session_state.messages = []
         st.rerun()
+    st.markdown("---")
+    st.caption("💡 LLM: DeepSeek API")
+    st.caption("💡 Embedding: 智谱 embedding-3")
+    st.caption("💡 DB: ChromaDB + BM25混合")
 
 # 渲染历史对话
 for msg in st.session_state.messages:
@@ -113,22 +115,37 @@ for msg in st.session_state.messages:
 
 # ================= 6. 主界面交互 =================
 if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
-    # 1. 记录用户提问
+    # 1. 记录并展示用户提问
     st.session_state.messages.append({"role": "user", "content": user_question})
     st.chat_message("user").write(user_question)
     
     with st.chat_message("assistant"):
-        with st.spinner("正在双路检索并思考..."):
-            # 2. 混合检索
-            retrieved_chunks = hybrid_search(user_question)
-            context = "\n\n".join(retrieved_chunks)
-            
-            # 3. 构建多轮 Prompt (取最近 3 轮对话作为记忆)
+        with st.spinner("正在理解上下文并检索..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
-            # 构建历史对话文本
+            # 【核心升级：查询重写 (Query Rewriting)】
+            search_query = user_question
+            # 如果历史记录多于1条（即有上下文），则进行重写
+            if len(st.session_state.messages) > 1:
+                history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
+                rewrite_prompt = f"""根据以下历史对话，将用户的最新追问改写为一个完整独立的搜索查询句子。直接输出改写后的问题，不要任何解释。
+历史对话：
+{history}
+最新追问：{user_question}"""
+                try:
+                    rw_res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": rewrite_prompt}])
+                    search_query = rw_res.choices[0].message.content.strip()
+                    st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
+                except Exception as e:
+                    pass # 如果重写失败，就退回原问题，不中断流程
+            
+            # 2. 用改写后的 search_query 去混合检索
+            retrieved_chunks = hybrid_search(search_query)
+            context = "\n\n".join(retrieved_chunks)
+            
+            # 3. 构建 Prompt，带上历史记忆和检索结果
             history_text = ""
-            for msg in st.session_state.messages[-5:-1]: # 不包含当前这句
+            for msg in st.session_state.messages[-5:-1]:
                 history_text += f"{'用户' if msg['role'] == 'user' else '助手'}: {msg['content']}\n"
 
             prompt = f"""你是一个专业的工程管理助手。
@@ -141,8 +158,8 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
 【参考规范】
 {context}
 
-【用户问题】
-{user_question}
+【当前用户问题】
+{search_query}
 """
             try:
                 response = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}])
