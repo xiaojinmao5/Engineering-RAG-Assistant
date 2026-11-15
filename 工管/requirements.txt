@@ -3,3 +3,4 @@ streamlit
 pypdf
 chromadb
 zhipuai
+jieba
