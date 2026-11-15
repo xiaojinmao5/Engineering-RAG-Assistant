@@ -162,11 +162,23 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
 {search_query}
 """
             try:
-                response = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}])
-                answer = response.choices[0].message.content
-                st.write(answer)
+                                # 1. 开启 stream=True 流式输出
+                response = client.chat.completions.create(
+                    model="deepseek-chat", 
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True
+                )
                 
-                # 4. 记录 AI 回答
+                # 2. 定义一个生成器，把流式返回的文字一点点拼起来
+                def stream_generator():
+                    for chunk in response:
+                        if chunk.choices[0].delta.content:
+                            yield chunk.choices[0].delta.content
+                
+                # 3. st.write_stream 会自动把文字像打字一样渲染出来，并返回完整字符串
+                answer = st.write_stream(stream_generator())
+                
+                # 4. 记录 AI 回答（此时 answer 已经是完整的一句话了）
                 st.session_state.messages.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"模型调用失败: {e}")
