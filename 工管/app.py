@@ -9,7 +9,7 @@ import jieba
 # ================= 0. 页面与侧边栏 =================
 st.set_page_config(page_title="工程规范智能助手", page_icon="🏗️", layout="wide")
 st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;}</style>""", unsafe_allow_html=True)
-st.title("🏗️ 工程规范与流程智能助手 (混合检索+多轮对话版)")
+st.title("🏗️ 工程规范与流程智能助手")
 
 # ================= 1. 读取与切分 =================
 @st.cache_data
@@ -67,29 +67,23 @@ collection = get_chroma_collection(clean_chunks)
 # ================= 4. 混合检索算法 =================
 def hybrid_search(query, k=3):
     if not collection or not clean_chunks: return []
-    
-    # 补充工程专属词典，防止被分词切碎
     jieba.add_word('防渗漏')
     jieba.add_word('保修期')
     jieba.add_word('强制监理')
-    
     query_words = list(jieba.cut(query))
     kw_scores = {}
     for idx, chunk in enumerate(clean_chunks):
         score = sum(1 for word in query_words if word in chunk)
         kw_scores[str(idx)] = score
-        
     query_vector = ZhipuEmbeddingFunction()([query])
     vector_results = collection.query(query_embeddings=query_vector, n_results=10)
     vector_ids = vector_results['ids'][0]
-    
     final_scores = []
     for vid in vector_ids:
         v_score = 1.0 / (vector_ids.index(vid) + 1) 
         k_score = kw_scores.get(vid, 0) / max(max(kw_scores.values()), 1)
         combined_score = 0.7 * v_score + 0.3 * k_score
         final_scores.append((combined_score, clean_chunks[int(vid)]))
-        
     final_scores.sort(key=lambda x: x[0], reverse=True)
     return [item[1] for item in final_scores[:k]]
 
@@ -97,7 +91,7 @@ def hybrid_search(query, k=3):
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 侧边栏
+# --- 侧边栏 (美化版) ---
 with st.sidebar:
     st.header("⚙️ 系统控制台")
     st.success(f"✅ 知识库就绪：{len(clean_chunks)} 个片段")
@@ -105,9 +99,17 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
     st.markdown("---")
-    st.caption("💡 LLM: DeepSeek API")
-    st.caption("💡 Embedding: 智谱 embedding-3")
-    st.caption("💡 DB: ChromaDB + BM25混合")
+    
+    # 架构配置（替换了原来的 caption）
+    st.markdown("### 💡 架构配置")
+    st.markdown("- **大语言模型**: DeepSeek-chat")
+    st.markdown("- **向量模型**: 智谱 embedding-3")
+    st.markdown("- **数据仓库**: ChromaDB")
+    st.markdown("- **检索策略**: 混合检索 (向量+BM25)")
+
+# --- 欢迎语 (新增) ---
+if len(st.session_state.messages) == 0:
+    st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题，我会给出准确的法条依据。")
 
 # 渲染历史对话
 for msg in st.session_state.messages:
@@ -123,9 +125,8 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
         with st.spinner("正在理解上下文并检索..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
-            # 【核心升级：查询重写 (Query Rewriting)】
+            # 【核心：查询重写 (Query Rewriting)】
             search_query = user_question
-            # 如果历史记录多于1条（即有上下文），则进行重写
             if len(st.session_state.messages) > 1:
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
                 rewrite_prompt = f"""根据以下历史对话，将用户的最新追问改写为一个完整独立的搜索查询句子。直接输出改写后的问题，不要任何解释。
@@ -136,14 +137,14 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
                     rw_res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": rewrite_prompt}])
                     search_query = rw_res.choices[0].message.content.strip()
                     st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
-                except Exception as e:
-                    pass # 如果重写失败，就退回原问题，不中断流程
+                except Exception:
+                    pass
             
-            # 2. 用改写后的 search_query 去混合检索
+            # 2. 混合检索
             retrieved_chunks = hybrid_search(search_query)
             context = "\n\n".join(retrieved_chunks)
             
-            # 3. 构建 Prompt，带上历史记忆和检索结果
+            # 3. 构建 Prompt
             history_text = ""
             for msg in st.session_state.messages[-5:-1]:
                 history_text += f"{'用户' if msg['role'] == 'user' else '助手'}: {msg['content']}\n"
@@ -162,23 +163,19 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
 {search_query}
 """
             try:
-                                # 1. 开启 stream=True 流式输出
+                # 4. 开启流式输出
                 response = client.chat.completions.create(
                     model="deepseek-chat", 
                     messages=[{"role": "user", "content": prompt}],
                     stream=True
                 )
                 
-                # 2. 定义一个生成器，把流式返回的文字一点点拼起来
                 def stream_generator():
                     for chunk in response:
                         if chunk.choices[0].delta.content:
                             yield chunk.choices[0].delta.content
                 
-                # 3. st.write_stream 会自动把文字像打字一样渲染出来，并返回完整字符串
                 answer = st.write_stream(stream_generator())
-                
-                # 4. 记录 AI 回答（此时 answer 已经是完整的一句话了）
                 st.session_state.messages.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"模型调用失败: {e}")
