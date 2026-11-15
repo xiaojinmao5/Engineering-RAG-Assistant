@@ -87,38 +87,44 @@ def hybrid_search(query, k=3):
     final_scores.sort(key=lambda x: x[0], reverse=True)
     return [item[1] for item in final_scores[:k]]
 
-# ================= 5. 多轮对话记忆管理 =================
+# ================= 5. 多轮对话记忆管理与侧边栏 =================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- 侧边栏 (美化版) ---
 with st.sidebar:
     st.header("⚙️ 系统控制台")
     st.success(f"✅ 知识库就绪：{len(clean_chunks)} 个片段")
+    
+    # 1. 清空按钮
     if st.button("🗑️ 清空对话记忆"):
         st.session_state.messages = []
         st.rerun()
-    st.markdown("---")
-        # 【新增：查看底层记忆功能】
-    with st.expander("🧠 透视：查看系统底层记忆 (JSON)"):
+        
+    # 2. 【你要的直观历史记忆面板】
+    with st.expander("📜 历史记忆回顾", expanded=False):
         if st.session_state.messages:
-            st.json(st.session_state.messages) # 把记忆列表变成好看的 JSON 格式
+            for msg in st.session_state.messages:
+                if msg["role"] == "user":
+                    st.markdown(f"🙋‍♂️ **你**: {msg['content']}")
+                else:
+                    st.markdown(f"🤖 **助手**: {msg['content']}")
         else:
-            st.caption("当前没有对话记忆")
+            st.caption("当前还没有聊天记录哦~")
             
     st.markdown("---")
-    # 架构配置（替换了原来的 caption）
+    
+    # 3. 架构配置
     st.markdown("### 💡 架构配置")
     st.markdown("- **大语言模型**: DeepSeek-chat")
     st.markdown("- **向量模型**: 智谱 embedding-3")
     st.markdown("- **数据仓库**: ChromaDB")
     st.markdown("- **检索策略**: 混合检索 (向量+BM25)")
 
-# --- 欢迎语 (新增) ---
+# --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
     st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题，我会给出准确的法条依据。")
 
-# 渲染历史对话
+# 渲染主界面历史对话
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
