@@ -9,22 +9,27 @@ import jieba
 # ================= 0. 页面与全局 CSS =================
 st.set_page_config(page_title="工程规范智能助手", page_icon="🏗️", layout="wide")
 
-# 注入 CSS：隐藏默认菜单，微调侧边栏和聊天气泡的间距，让它看起来更精致
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    /* 侧边栏字体略微缩小，显得更精致 */
     [data-testid="stSidebar"] { font-size: 14px; }
-    /* 历史记录面板的样式 */
     .history-item { margin-bottom: 8px; padding: 8px; border-radius: 6px; font-size: 13px; line-height: 1.4; }
-    .history-user { background-color: #f0f2f6; color: #333; }
-    .history-assistant { background-color: #e8f4f8; color: #333; }
+    .history-user { background-color: #F3F4F6; color: #1F2937; border-left: 3px solid #2563EB; }
+    .history-assistant { background-color: #F0F9FF; color: #1F2937; border-left: 3px solid #0EA5E9; }
     .history-role { font-weight: bold; font-size: 12px; margin-bottom: 4px; display: block; opacity: 0.7;}
+    /* 强制缩小默认头像尺寸 */
+    [data-testid="stChatMessage"] img { width: 28px; height: 28px; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手")
+
+# 【新增：极简纯色 SVG 头像】
+# 深蓝色用户头像 (白底人像)
+USER_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTIiIGZpbGw9IiMyNTYzRUIiIC8+PHBhdGggZD0iTTEyIDEyYzIuMjEgMCA0LTEuNzkgNC00cy0xLjc5LTQtNC00LTQgMS43OS00IDQgMS43OSA0IDQgNHptMCAyYy0yLjY3IDAtOCAxLjM0LTggNHYyaDE2di0yYzAtMi42Ni01LjMzLTQtOC00eiIvPjwvc3ZnPg=="
+# 科技蓝 AI 头像 (白底机器人)
+AI_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTIiIGZpbGw9IiMwRUE1RTkiIC8+PHBhdGggZD0iTTEyIDJhMiAyIDAgMCAxIDIgMmMwIC43NC0uNCAxLjM5LTEgMS43M1Y3aDNhNSA1IDAgMCAxIDUgNXY1YTIgMiAwIDAgMS0yIDJINWEyIDIgMCAwIDEtMi0ydi01YTUgNSAwIDAgMSA1LTVoM1Y1LjczQTIgMiAwIDAgMSAxMiAyei03IDloMnYySDd2LTJ6bTggMGgydjJoLTJ2LTJ6bS01IDRoNHYyaC00di0yeiIvPjwvc3ZnPg=="
 
 # ================= 1. 读取与切分 =================
 @st.cache_data
@@ -32,8 +37,7 @@ def load_data():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(current_dir, "data")
     all_text = ""
-    if not os.path.exists(data_dir):
-        return []
+    if not os.path.exists(data_dir): return []
     for filename in os.listdir(data_dir):
         file_path = os.path.join(data_dir, filename)
         if filename == "guifan.pdf": continue
@@ -110,27 +114,24 @@ with st.sidebar:
     st.caption("⚙️ **系统控制台**")
     st.success(f"✅ 知识库就绪：{len(clean_chunks)} 个片段")
     
-    # 1. 清空按钮
     if st.button("🗑️ 清空对话记忆", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
         
     st.divider()
     
-    # 2. 【美化版】历史记忆回顾
     with st.expander("📜 历史记忆回顾", expanded=False):
         if st.session_state.messages:
             for msg in st.session_state.messages:
                 if msg["role"] == "user":
-                    st.markdown(f'<div class="history-item history-user"><span class="history-role">🙋‍♂️ 你</span>{msg["content"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="history-item history-user"><span class="history-role">👤 用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">🤖 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">🤖 AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
         else:
             st.caption("暂无历史记录~")
             
     st.divider()
     
-    # 3. 【美化版】架构配置（使用小字号）
     st.caption("💡 **架构配置**")
     st.caption("• LLM: DeepSeek-chat")
     st.caption("• Embedding: 智谱 embedding-3")
@@ -141,20 +142,22 @@ with st.sidebar:
 if len(st.session_state.messages) == 0:
     st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题，我会给出准确的法条依据。")
 
-# 渲染主界面历史对话
+# 【替换头像：渲染主界面历史对话】
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    avatar_img = USER_AVATAR if msg["role"] == "user" else AI_AVATAR
+    st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
 
 # ================= 6. 主界面交互 =================
 if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
     st.session_state.messages.append({"role": "user", "content": user_question})
-    st.chat_message("user").write(user_question)
+    # 【替换头像：当前用户提问】
+    st.chat_message("user", avatar=USER_AVATAR).write(user_question)
     
-    with st.chat_message("assistant"):
+    # 【替换头像：当前 AI 回答】
+    with st.chat_message("assistant", avatar=AI_AVATAR):
         with st.spinner("正在理解上下文并检索..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
-            # 查询重写
             search_query = user_question
             if len(st.session_state.messages) > 1:
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
@@ -165,11 +168,9 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
                     st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
                 except Exception: pass
             
-            # 混合检索
             retrieved_chunks = hybrid_search(search_query)
             context = "\n\n".join(retrieved_chunks)
             
-            # 构建 Prompt
             history_text = ""
             for msg in st.session_state.messages[-5:-1]:
                 history_text += f"{'用户' if msg['role'] == 'user' else '助手'}: {msg['content']}\n"
@@ -188,7 +189,6 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
 {search_query}
 """
             try:
-                # 流式输出
                 response = client.chat.completions.create(
                     model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=True
                 )
