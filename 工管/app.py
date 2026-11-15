@@ -20,20 +20,10 @@ st.markdown("""
     .history-user { border-left: 2px solid #9CA3AF; color: #374151; }
     .history-assistant { border-left: 2px solid #3B82F6; color: #374151; }
     .history-role { font-weight: 600; font-size: 12px; margin-bottom: 4px; display: block; color: #6B7280; }
-    
-    /* 强制调整默认头像的尺寸，不拉伸 */
-    [data-testid="stChatMessage"] img { width: 32px; height: 32px; object-fit: contain; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手")
-
-# 【新增：极简线框 SVG 头像】
-# 深灰色线框人像 (Feather User Icon)
-USER_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0QjU1NjMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAgMjF2LTJhNCA0IDAgMCAwLTQtNEg4YTQgNCAwIDAgMC00IDR2MiI+PC9wYXRoPjxjaXJjbGUgY3g9IjEyIiBjeT0iNyIgcj0iNCI+PC9jaXJjbGU+PC9zdmc+"
-
-# 蓝色线框机器人 (Feather Bot Icon)
-AI_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMyNTYzRUIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIxMSIgd2lkdGg9IjE4IiBoZWlnaHQ9IjEwIiByeD0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjEyIiBjeT0iNSIgcj0iMiI+PC9jaXJjbGU+PHBhdGggZD0iTTEyIDd2NCI+PC9wYXRoPjxsaW5lIHgxPSI4IiB5MT0iMTYiIHgyPSI4IiB5Mj0iMTYiPjwvbGluZT48bGluZSB4MT0iMTYiIHkxPSIxNiIgeDI9IjE2IiB5Mj0iMTYiPjwvbGluZT48L3N2Zz4="
 
 # ================= 1. 读取与切分 =================
 @st.cache_data
@@ -146,17 +136,16 @@ with st.sidebar:
 if len(st.session_state.messages) == 0:
     st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题，我会给出准确的法条依据。")
 
-# 渲染主界面历史对话
+# 【恢复稳定：使用 Streamlit 原生头像】
 for msg in st.session_state.messages:
-    avatar_img = USER_AVATAR if msg["role"] == "user" else AI_AVATAR
-    st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
+    st.chat_message(msg["role"]).write(msg["content"])
 
 # ================= 6. 主界面交互 =================
 if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
     st.session_state.messages.append({"role": "user", "content": user_question})
-    st.chat_message("user", avatar=USER_AVATAR).write(user_question)
+    st.chat_message("user").write(user_question)
     
-    with st.chat_message("assistant", avatar=AI_AVATAR):
+    with st.chat_message("assistant"):
         with st.spinner("正在理解上下文并检索..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
