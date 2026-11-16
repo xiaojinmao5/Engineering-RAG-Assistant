@@ -16,13 +16,25 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     ::-webkit-scrollbar { display: none !important; }
-    [data-testid="stSidebar"] { width: 320px !important; min-width: 320px !important; background-color: #FAFAFA !important; }
+    
+    /* 【修复：解除宽度锁死，允许鼠标拖拽】 */
+    [data-testid="stSidebar"] {
+        width: 380px !important;      /* 默认打开时的宽度 */
+        min-width: 240px !important;  /* 允许拖拽缩小的最小宽度 */
+        background-color: #FAFAFA !important;
+    }
+    /* 确保侧边栏拖拽手柄正常显示 */
+    div[style*="cursor: col-resize"] {
+        display: block !important;
+    }
+    
+    /* 隐藏折叠按钮 */
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
-    [data-testid="stSidebarUserContent"] { padding: 1rem 0.5rem !important; }
-    [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     
-    /* 针对侧边栏内小折叠框的微调 */
+    /* 侧边栏内边距微调 */
+    [data-testid="stSidebarUserContent"] { padding: 1rem 0.8rem !important; }
+    [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -180,11 +192,10 @@ with st.sidebar:
 
     st.caption("📜 **历史记忆回顾**")
     
-    # 【核心优化：问题变成带箭头的折叠框】
+    # 问题变成带箭头的折叠框
     if st.session_state.messages:
-        recent_messages = st.session_state.messages[-4:] # 取最近2轮对话
+        recent_messages = st.session_state.messages[-4:] 
         
-        # 将消息两两配对 (Question, Answer)
         pairs = []
         temp_q = None
         for msg in recent_messages:
@@ -195,9 +206,7 @@ with st.sidebar:
                 temp_q = None
                 
         for q, a in pairs:
-            # 如果问题太长，截断它作为标题
             short_q = q[:12] + "..." if len(q) > 12 else q
-            # 使用 expander 将问题做成标题，点开看回答
             with st.expander(f"🙋‍♂️ {short_q}", expanded=False):
                 st.write(a)
     else:
