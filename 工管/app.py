@@ -5,6 +5,7 @@ from openai import OpenAI
 import chromadb
 from zhipuai import ZhipuAI
 import jieba
+import requests
 
 # ================= 0. 页面与全局 CSS =================
 st.set_page_config(page_title="工程规范智能助手", page_icon="🏗️", layout="wide")
@@ -14,8 +15,6 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stSidebar"] { font-size: 14px; }
-    
-    /* 极简线框风历史记录 */
     .history-item { margin-bottom: 12px; padding: 8px 0 8px 10px; font-size: 13px; line-height: 1.5; }
     .history-user { border-left: 2px solid #9CA3AF; color: #374151; }
     .history-assistant { border-left: 2px solid #3B82F6; color: #374151; }
@@ -24,6 +23,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手")
+
+USER_AVATAR = "https://img.icons8.com/ios/50/6B7280/user--v1.png"
+AI_AVATAR = "https://img.icons8.com/ios/50/3B82F6/bot.png"
 
 # ================= 1. 读取与切分 =================
 @st.cache_data
@@ -51,7 +53,7 @@ def load_data():
 
 clean_chunks = load_data()
 
-# ================= 2. 自定义智谱 Embedding =================
+# ================= 2. 智谱 Embedding 与 向量库 =================
 class ZhipuEmbeddingFunction:
     def __init__(self):
         self.client = ZhipuAI(api_key=os.environ.get("ZHIPU_API_KEY"))
@@ -62,7 +64,6 @@ class ZhipuEmbeddingFunction:
     def name(self) -> str: return f"zhipuai/{self.model_name}"
     def get_config(self) -> dict: return {"model": self.model_name}
 
-# ================= 3. 初始化向量库 =================
 @st.cache_resource
 def get_chroma_collection(chunks):
     if not chunks: return None
@@ -77,8 +78,8 @@ def get_chroma_collection(chunks):
 
 collection = get_chroma_collection(clean_chunks)
 
-# ================= 4. 混合检索算法 =================
-def hybrid_search(query, k=3):
+# ================= 3. 混合检索 (海选) =================
+def hybrid_search(query, k=10): 
     if not collection or not clean_chunks: return []
     jieba.add_word('防渗漏')
     jieba.add_word('保修期')
@@ -89,7 +90,7 @@ def hybrid_search(query, k=3):
         score = sum(1 for word in query_words if word in chunk)
         kw_scores[str(idx)] = score
     query_vector = ZhipuEmbeddingFunction()([query])
-    vector_results = collection.query(query_embeddings=query_vector, n_results=10)
+    vector_results = collection.query(query_embeddings=query_vector, n_results=k)
     vector_ids = vector_results['ids'][0]
     final_scores = []
     for vid in vector_ids:
@@ -98,7 +99,32 @@ def hybrid_search(query, k=3):
         combined_score = 0.7 * v_score + 0.3 * k_score
         final_scores.append((combined_score, clean_chunks[int(vid)]))
     final_scores.sort(key=lambda x: x[0], reverse=True)
-    return [item[1] for item in final_scores[:k]]
+    return [item[1] for item in final_scores]
+
+# ================= 4. Reranker 重排序 (复试) =================
+def rerank_chunks(query, chunks, top_n=3):
+    if not chunks: return []
+    url = "https://api.siliconflow.cn/v1/rerank"
+    payload = {
+        "model": "BAAI/bge-reranker-v2-m3",
+        "query": query,
+        "documents": chunks,
+        "top_n": top_n,
+        "return_documents": False
+    }
+    headers = {
+        "Authorization": f"Bearer {os.environ.get('SILICONFLOW_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        results = response.json()
+        reranked = [chunks[item['index']] for item in results['results']]
+        return reranked
+    except Exception as e:
+        st.warning(f"Reranker 降级处理：{e}")
+        return chunks[:top_n] 
 
 # ================= 5. 侧边栏与记忆管理 =================
 if "messages" not in st.session_state:
@@ -126,29 +152,32 @@ with st.sidebar:
             
     st.divider()
     
+    # 【更新：全新的左下角架构详情】
     st.caption("💡 **架构配置**")
-    st.caption("• LLM: DeepSeek-chat")
-    st.caption("• Embedding: 智谱 embedding-3")
-    st.caption("• DB: ChromaDB")
-    st.caption("• 检索: 混合检索 (向量+BM25)")
+    st.caption("• **大语言模型**: DeepSeek-chat")
+    st.caption("• **向量模型**: 智谱 embedding-3")
+    st.caption("• **检索策略**: 混合召回 (向量+BM25) 获取 Top-10")
+    st.caption("• **精排机制**: BGE-Reranker 重排获取 Top-3")
 
 # --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
-    st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题，我会给出准确的法条依据。")
+    st.info("👋 你好！我是工程规范智能助手。你可以问我关于《建设工程质量管理条例》的任何问题。")
 
-# 【恢复稳定：使用 Streamlit 原生头像】
+# 渲染主界面历史对话
 for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+    avatar_img = USER_AVATAR if msg["role"] == "user" else AI_AVATAR
+    st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
 
 # ================= 6. 主界面交互 =================
 if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
     st.session_state.messages.append({"role": "user", "content": user_question})
-    st.chat_message("user").write(user_question)
+    st.chat_message("user", avatar=USER_AVATAR).write(user_question)
     
-    with st.chat_message("assistant"):
-        with st.spinner("正在理解上下文并检索..."):
+    with st.chat_message("assistant", avatar=AI_AVATAR):
+        with st.spinner("正在检索、重排并思考..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
+            # 查询重写
             search_query = user_question
             if len(st.session_state.messages) > 1:
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
@@ -159,7 +188,10 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
                     st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
                 except Exception: pass
             
-            retrieved_chunks = hybrid_search(search_query)
+            # 海选 + 精排
+            raw_chunks = hybrid_search(search_query, k=10) 
+            retrieved_chunks = rerank_chunks(search_query, raw_chunks, top_n=3) 
+            
             context = "\n\n".join(retrieved_chunks)
             
             history_text = ""
@@ -193,6 +225,6 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
             except Exception as e:
                 st.error(f"模型调用失败: {e}")
                 
-            with st.expander("📚 查看混合检索到的原文依据"):
+            with st.expander("📚 查看重排后精选的原文依据"):
                 for i, chunk in enumerate(retrieved_chunks):
                     st.info(f"**参考片段 {i+1}：**\n{chunk}")
