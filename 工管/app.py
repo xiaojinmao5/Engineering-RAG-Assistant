@@ -15,7 +15,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 隐藏主页面和侧边栏的滚动条 */
+    /* 隐藏滚动条 */
     ::-webkit-scrollbar { width: 0px; background: transparent; }
     
     /* 强制固定侧边栏宽度 */
@@ -26,20 +26,21 @@ st.markdown("""
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
     
-    /* 极限压缩侧边栏边距 */
+    /* 【侧边栏顶格布局】 */
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: 1.5rem;
-        padding-bottom: 0rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-top: 1rem !important;
+        padding-left: 0rem !important;  /* 强制左边距为0 */
+        padding-right: 0.5rem !important;
     }
-    [data-testid="stSidebar"] .element-container { margin-bottom: 0.2rem; }
-    [data-testid="stSidebar"] hr { margin-top: 0.4rem; margin-bottom: 0.4rem; }
-    [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem; }
-    
-    /* 【修改：去掉蓝色，改成深灰色】 */
-    .tiny-config { font-size: 11px; color: #6B7280; line-height: 1.6; margin-top: 5px; }
-    .tiny-config span { color: #374151; font-weight: 600; }
+    /* 各个组件保留一点内边距，以免文字贴死边缘 */
+    [data-testid="stSidebar"] .stMarkdown, 
+    [data-testid="stSidebar"] .stButton,
+    [data-testid="stSidebar"] [data-testid="stExpander"] {
+        padding-left: 0.8rem;
+    }
+    /* 压扁垂直间距 */
+    [data-testid="stSidebar"] .element-container { margin-bottom: 0.3rem; }
+    [data-testid="stSidebar"] hr { margin-top: 0.5rem; margin-bottom: 0.5rem; }
     
     /* 历史记录样式 */
     .history-item { margin-bottom: 8px; padding: 6px 0 6px 8px; font-size: 12px; line-height: 1.4; }
@@ -50,6 +51,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手")
+
+# 【新增：把技术栈挪到主界面大标题下方】
+st.markdown("""
+<div style="font-size: 13px; color: #6B7280; margin-bottom: 25px; background-color: #F9FAFB; padding: 10px; border-radius: 8px; border-left: 4px solid #3B82F6;">
+    💡 <b>底层架构:</b> DeepSeek-chat &nbsp;|&nbsp; 
+    <b>向量:</b> 智谱 embedding-3 &nbsp;|&nbsp; 
+    <b>召回:</b> 混合检索 (Top-10) &nbsp;|&nbsp; 
+    <b>精排:</b> BGE-Reranker (Top-3)
+</div>
+""", unsafe_allow_html=True)
 
 USER_AVATAR = "https://img.icons8.com/ios/50/6B7280/user--v1.png"
 AI_AVATAR = "https://img.icons8.com/ios/50/3B82F6/bot.png"
@@ -168,11 +179,9 @@ with st.sidebar:
     st.caption("⚙️ **系统控制台**")
     st.success(f"✅ 知识库：{len(clean_chunks)} 个片段")
     
-    # 1. 模型参数调节
     st.caption("🎛️ **模型参数**")
     temperature = st.slider("发散度 (Temperature)", min_value=0.0, max_value=1.0, value=0.2, step=0.1, help="越低越严谨（推荐工程场景），越高越有创造力。")
 
-    # 2. 知识库文件
     with st.expander("📁 已加载知识库", expanded=False):
         if loaded_files:
             for file in loaded_files:
@@ -180,7 +189,6 @@ with st.sidebar:
         else:
             st.caption("暂无文件")
 
-    # 3. 快捷提问
     st.caption("💡 **快捷提问**")
     if st.button("外墙渗水保修几年？", use_container_width=True):
         st.session_state.quick_prompt = "外墙渗水保修几年？"
@@ -193,7 +201,6 @@ with st.sidebar:
         
     st.divider()
     
-    # 4. 历史记忆
     with st.expander("📜 历史记忆回顾", expanded=False):
         if st.session_state.messages:
             for msg in st.session_state.messages:
@@ -203,19 +210,6 @@ with st.sidebar:
                     st.markdown(f'<div class="history-item history-assistant"><span class="history-role">AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
         else:
             st.caption("暂无历史记录~")
-            
-    st.divider()
-    
-    # 5. 底层架构 (深灰色)
-    st.markdown("""
-    <div class="tiny-config">
-    💡 <b>底层架构</b><br>
-    • LLM: <span>DeepSeek-chat</span><br>
-    • 向量: <span>智谱 embedding-3</span><br>
-    • 召回: <span>混合检索 (Top-10)</span><br>
-    • 精排: <span>BGE-Reranker (Top-3)</span>
-    </div>
-    """, unsafe_allow_html=True)
 
 # --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
@@ -227,7 +221,6 @@ for msg in st.session_state.messages:
     st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
 
 # ================= 6. 主界面逻辑 =================
-# 处理快捷按钮的输入
 user_question = st.chat_input("例如：施工单位偷工减料会面临什么处罚？")
 if st.session_state.quick_prompt:
     user_question = st.session_state.quick_prompt
@@ -241,7 +234,6 @@ if user_question:
         with st.spinner("正在检索、重排并思考..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
-            # 查询重写
             search_query = user_question
             if len(st.session_state.messages) > 1:
                 history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
@@ -252,7 +244,6 @@ if user_question:
                     st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
                 except Exception: pass
             
-            # 海选 + 精排
             raw_chunks = hybrid_search(search_query, k=10) 
             retrieved_chunks = rerank_chunks(search_query, raw_chunks, top_n=3) 
             
@@ -280,7 +271,7 @@ if user_question:
                     model="deepseek-chat", 
                     messages=[{"role": "user", "content": prompt}], 
                     stream=True,
-                    temperature=temperature # 新增：接入了滑块的参数
+                    temperature=temperature
                 )
                 def stream_generator():
                     for chunk in response:
