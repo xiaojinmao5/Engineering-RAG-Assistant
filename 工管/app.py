@@ -17,18 +17,12 @@ st.markdown("""
     footer {visibility: hidden;}
     ::-webkit-scrollbar { display: none !important; }
     
-    /* 【修复：解除宽度锁死，允许鼠标拖拽】 */
+    /* 【解除封印】不再强制宽度，把控制权还给系统，恢复鼠标拖拽 */
     [data-testid="stSidebar"] {
-        width: 380px !important;      /* 默认打开时的宽度 */
-        min-width: 240px !important;  /* 允许拖拽缩小的最小宽度 */
         background-color: #FAFAFA !important;
     }
-    /* 确保侧边栏拖拽手柄正常显示 */
-    div[style*="cursor: col-resize"] {
-        display: block !important;
-    }
     
-    /* 隐藏折叠按钮 */
+    /* 隐藏折叠按钮，防止侧边栏被意外收起 */
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
     
@@ -117,7 +111,12 @@ if collection.count() == 0 and static_chunks:
     with st.spinner("首次启动，正在将文件向量化并存入硬盘..."):
         add_to_vector_db(static_chunks)
 
-all_chunks = collection.get()["documents"]
+# 新增缓存，把数据存在内存里，不要每次都去硬盘读
+@st.cache_data
+def get_all_chunks():
+    return collection.get()["documents"]
+
+all_chunks = get_all_chunks()
 
 # ================= 4. 混合检索与 Reranker =================
 def hybrid_search(query, k=10): 
@@ -191,11 +190,8 @@ with st.sidebar:
         if st.button("偷工减料会受什么处罚？", use_container_width=True): st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
 
     st.caption("📜 **历史记忆回顾**")
-    
-    # 问题变成带箭头的折叠框
     if st.session_state.messages:
         recent_messages = st.session_state.messages[-4:] 
-        
         pairs = []
         temp_q = None
         for msg in recent_messages:
