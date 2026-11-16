@@ -15,6 +15,12 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stSidebar"] { font-size: 14px; }
+    
+    /* 【新增：强制固定侧边栏，隐藏收缩按钮】 */
+    [data-testid="stSidebarCollapseButton"] { display: none; }
+    [data-testid="collapsedControl"] { display: none; }
+    
+    /* 历史记录样式 */
     .history-item { margin-bottom: 12px; padding: 8px 0 8px 10px; font-size: 13px; line-height: 1.5; }
     .history-user { border-left: 2px solid #9CA3AF; color: #374151; }
     .history-assistant { border-left: 2px solid #3B82F6; color: #374151; }
@@ -152,7 +158,6 @@ with st.sidebar:
             
     st.divider()
     
-    # 【更新：全新的左下角架构详情】
     st.caption("💡 **架构配置**")
     st.caption("• **大语言模型**: DeepSeek-chat")
     st.caption("• **向量模型**: 智谱 embedding-3")
