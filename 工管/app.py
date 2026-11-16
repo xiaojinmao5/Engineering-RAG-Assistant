@@ -15,31 +15,38 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 【强制固定侧边栏，隐藏收缩按钮】 */
-    [data-testid="stSidebarCollapseButton"] { display: none; }
-    [data-testid="collapsedControl"] { display: none; }
+    /* 隐藏主页面和侧边栏的所有滚动条（但保留鼠标滚轮功能） */
+    ::-webkit-scrollbar { width: 0px; background: transparent; }
     
-    /* 【核心：加宽侧边栏，并隐藏滚动条】 */
+    /* 强制固定侧边栏宽度 */
     [data-testid="stSidebar"] {
         width: 320px !important;
         min-width: 320px !important;
     }
-    /* 隐藏侧边栏的上下滚动条 */
-    [data-testid="stSidebar"] ::-webkit-scrollbar {
-        display: none;
-    }
+    /* 取消侧边栏折叠按钮 */
+    [data-testid="stSidebarCollapseButton"] { display: none; }
+    [data-testid="collapsedControl"] { display: none; }
+    
+    /* 【极限压缩】干掉侧边栏内部的上下边距 */
     [data-testid="stSidebar"] > div:first-child {
-        padding-left: 1.2rem;
-        padding-right: 1.2rem;
-        padding-top: 2rem;
-        font-size: 14px;
+        padding-top: 1.5rem;
+        padding-bottom: 0rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
+    [data-testid="stSidebar"] .element-container { margin-bottom: 0.3rem; }
+    [data-testid="stSidebar"] hr { margin-top: 0.5rem; margin-bottom: 0.5rem; }
+    [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.5rem; }
+    
+    /* 自定义超小号字体的架构配置 */
+    .tiny-config { font-size: 11px; color: #6B7280; line-height: 1.6; margin-top: 5px; }
+    .tiny-config span { color: #3B82F6; font-weight: 600; }
     
     /* 历史记录样式 */
-    .history-item { margin-bottom: 12px; padding: 8px 0 8px 10px; font-size: 13px; line-height: 1.5; }
+    .history-item { margin-bottom: 8px; padding: 6px 0 6px 8px; font-size: 12px; line-height: 1.4; }
     .history-user { border-left: 2px solid #9CA3AF; color: #374151; }
     .history-assistant { border-left: 2px solid #3B82F6; color: #374151; }
-    .history-role { font-weight: 600; font-size: 12px; margin-bottom: 4px; display: block; color: #6B7280; }
+    .history-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; display: block; color: #6B7280; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -173,12 +180,16 @@ with st.sidebar:
             
     st.divider()
     
-    # 【文字再精简一点，绝对不换行】
-    st.caption("💡 **底层架构**")
-    st.caption("• **LLM**: DeepSeek-chat")
-    st.caption("• **向量**: 智谱 embedding-3")
-    st.caption("• **召回**: 混合检索 (Top-10)")
-    st.caption("• **精排**: BGE-Reranker (Top-3)")
+    # 【彻底解决字大换行的问题：使用自定义 HTML 小字】
+    st.markdown("""
+    <div class="tiny-config">
+    💡 <b>底层架构</b><br>
+    • LLM: <span>DeepSeek-chat</span><br>
+    • 向量: <span>智谱 embedding-3</span><br>
+    • 召回: <span>混合检索 (Top-10)</span><br>
+    • 精排: <span>BGE-Reranker (Top-3)</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
