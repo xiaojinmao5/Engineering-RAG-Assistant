@@ -22,11 +22,8 @@ st.markdown("""
     [data-testid="stSidebarUserContent"] { padding: 1rem 0.5rem !important; }
     [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     
-    /* 摘要气泡样式 */
-    .history-item { margin-bottom: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.4; border-radius: 4px;}
-    .history-user { border-left: 3px solid #9CA3AF; color: #374151; background: #fff;}
-    .history-assistant { border-left: 3px solid #3B82F6; color: #374151; background: #fff;}
-    .history-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; display: block; color: #6B7280; }
+    /* 针对侧边栏内小折叠框的微调 */
+    [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -181,20 +178,32 @@ with st.sidebar:
         if st.button("外墙渗水保修几年？", use_container_width=True): st.session_state.quick_prompt = "外墙渗水保修几年？"
         if st.button("偷工减料会受什么处罚？", use_container_width=True): st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
 
-    # 【核心修复：外层折叠 + 内部截断摘要】
-    with st.expander("📜 历史记忆回顾", expanded=False):
-        if st.session_state.messages:
-            recent_messages = st.session_state.messages[-4:] 
-            for msg in recent_messages:
-                if msg["role"] == "user":
-                    st.markdown(f'<div class="history-item history-user"><span class="history-role">用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
-                else:
-                    # 截断 AI 的回答，只显示前 30 个字符，防止侧边栏过长
-                    short_content = msg["content"][:30].replace("\n", " ") + "..." if len(msg["content"]) > 30 else msg["content"]
-                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">AI 助手</span>{short_content}</div>', unsafe_allow_html=True)
-        else:
-            st.caption("暂无历史记录~")
+    st.caption("📜 **历史记忆回顾**")
+    
+    # 【核心优化：问题变成带箭头的折叠框】
+    if st.session_state.messages:
+        recent_messages = st.session_state.messages[-4:] # 取最近2轮对话
+        
+        # 将消息两两配对 (Question, Answer)
+        pairs = []
+        temp_q = None
+        for msg in recent_messages:
+            if msg["role"] == "user":
+                temp_q = msg["content"]
+            elif msg["role"] == "assistant" and temp_q:
+                pairs.append((temp_q, msg["content"]))
+                temp_q = None
+                
+        for q, a in pairs:
+            # 如果问题太长，截断它作为标题
+            short_q = q[:12] + "..." if len(q) > 12 else q
+            # 使用 expander 将问题做成标题，点开看回答
+            with st.expander(f"🙋‍♂️ {short_q}", expanded=False):
+                st.write(a)
+    else:
+        st.caption("暂无历史记录~")
 
+    st.divider()
     if st.button("🗑️ 清空对话记忆", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
