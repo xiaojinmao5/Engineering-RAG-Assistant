@@ -15,44 +15,47 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 隐藏滚动条 */
-    ::-webkit-scrollbar { width: 0px; background: transparent; }
+    /* 【暴力隐藏滚动条】 */
+    ::-webkit-scrollbar { display: none !important; }
     
     /* 强制固定侧边栏宽度 */
     [data-testid="stSidebar"] {
         width: 320px !important;
         min-width: 320px !important;
+        background-color: #FAFAFA !important; /* 给侧边栏加一点极浅的底色，看起来像个独立面板 */
     }
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
     
-    /* 【侧边栏顶格布局】 */
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 1rem !important;
-        padding-left: 0rem !important;  /* 强制左边距为0 */
-        padding-right: 0.5rem !important;
+    /* 【绝对顶格：干掉所有内边距】 */
+    [data-testid="stSidebarUserContent"] {
+        padding: 1rem 0.5rem !important; /* 只留一点点上下和右边的呼吸空间，左边彻底0 */
     }
-    /* 各个组件保留一点内边距，以免文字贴死边缘 */
-    [data-testid="stSidebar"] .stMarkdown, 
-    [data-testid="stSidebar"] .stButton,
-    [data-testid="stSidebar"] [data-testid="stExpander"] {
-        padding-left: 0.8rem;
-    }
-    /* 压扁垂直间距 */
-    [data-testid="stSidebar"] .element-container { margin-bottom: 0.3rem; }
-    [data-testid="stSidebar"] hr { margin-top: 0.5rem; margin-bottom: 0.5rem; }
     
+    /* 【极限压缩垂直高度】 */
+    [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
+    [data-testid="stSidebar"] hr { margin-top: 0.2rem !important; margin-bottom: 0.2rem !important; }
+    [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem !important; }
+    
+    /* 针对左侧所有文字类容器，强制拉满 */
+    [data-testid="stSidebar"] .stMarkdown { width: 100% !important; padding-left: 0 !important; }
+    
+    /* 针对侧边栏的按钮和滑块，稍微加一点内边距防止真贴边 */
+    [data-testid="stSidebar"] .stButton, 
+    [data-testid="stSidebar"] .stSlider,
+    [data-testid="stSidebar"] .stSuccess { padding-left: 0.5rem; padding-right: 0.5rem; }
+
     /* 历史记录样式 */
-    .history-item { margin-bottom: 8px; padding: 6px 0 6px 8px; font-size: 12px; line-height: 1.4; }
-    .history-user { border-left: 2px solid #9CA3AF; color: #374151; }
-    .history-assistant { border-left: 2px solid #3B82F6; color: #374151; }
+    .history-item { margin-bottom: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.4; border-radius: 4px;}
+    .history-user { border-left: 3px solid #9CA3AF; color: #374151; background: #fff;}
+    .history-assistant { border-left: 3px solid #3B82F6; color: #374151; background: #fff;}
     .history-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; display: block; color: #6B7280; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手")
 
-# 【新增：把技术栈挪到主界面大标题下方】
+# 技术栈横幅
 st.markdown("""
 <div style="font-size: 13px; color: #6B7280; margin-bottom: 25px; background-color: #F9FAFB; padding: 10px; border-radius: 8px; border-left: 4px solid #3B82F6;">
     💡 <b>底层架构:</b> DeepSeek-chat &nbsp;|&nbsp; 
@@ -73,12 +76,10 @@ def load_data():
     all_text = ""
     file_list = []
     if not os.path.exists(data_dir): return [], []
-    
     for filename in os.listdir(data_dir):
         file_path = os.path.join(data_dir, filename)
         if filename == "guifan.pdf": continue
         file_list.append(filename)
-        
         if filename.endswith(".txt"):
             with open(file_path, "r", encoding="utf-8") as f:
                 all_text += f.read() + "\n"
@@ -90,7 +91,6 @@ def load_data():
                     text = page.extract_text()
                     if text: all_text += text + "\n"
             except Exception: pass
-            
     chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', all_text)
     return [c.strip() for c in chunks if len(c.strip()) > 10], file_list
 
@@ -176,32 +176,31 @@ if "quick_prompt" not in st.session_state:
     st.session_state.quick_prompt = None
 
 with st.sidebar:
+    # 把系统提示和状态合并压缩
     st.caption("⚙️ **系统控制台**")
     st.success(f"✅ 知识库：{len(clean_chunks)} 个片段")
     
     st.caption("🎛️ **模型参数**")
-    temperature = st.slider("发散度 (Temperature)", min_value=0.0, max_value=1.0, value=0.2, step=0.1, help="越低越严谨（推荐工程场景），越高越有创造力。")
+    temperature = st.slider("发散度 (Temperature)", min_value=0.0, max_value=1.0, value=0.2, step=0.1)
 
-    with st.expander("📁 已加载知识库", expanded=False):
+    # 把所有占高度的组件放进折叠框，极大节省空间
+    with st.expander("📁 知识库 / 💡 快捷提问 / 📜 历史记录", expanded=False):
+        st.write("**已加载文件:**")
         if loaded_files:
             for file in loaded_files:
                 st.caption(f"📄 {file}")
         else:
             st.caption("暂无文件")
-
-    st.caption("💡 **快捷提问**")
-    if st.button("外墙渗水保修几年？", use_container_width=True):
-        st.session_state.quick_prompt = "外墙渗水保修几年？"
-    if st.button("偷工减料会受什么处罚？", use_container_width=True):
-        st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
-
-    if st.button("🗑️ 清空对话记忆", use_container_width=True):
-        st.session_state.messages = []
-        st.rerun()
-        
-    st.divider()
-    
-    with st.expander("📜 历史记忆回顾", expanded=False):
+            
+        st.divider()
+        st.write("**快捷提问:**")
+        if st.button("外墙渗水保修几年？", use_container_width=True):
+            st.session_state.quick_prompt = "外墙渗水保修几年？"
+        if st.button("偷工减料会受什么处罚？", use_container_width=True):
+            st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
+            
+        st.divider()
+        st.write("**历史记忆:**")
         if st.session_state.messages:
             for msg in st.session_state.messages:
                 if msg["role"] == "user":
@@ -209,7 +208,12 @@ with st.sidebar:
                 else:
                     st.markdown(f'<div class="history-item history-assistant"><span class="history-role">AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
         else:
-            st.caption("暂无历史记录~")
+            st.caption("暂无记录~")
+
+    # 清空按钮放在最外面，方便点击
+    if st.button("🗑️ 清空对话记忆", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
 # --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
@@ -268,10 +272,7 @@ if user_question:
 """
             try:
                 response = client.chat.completions.create(
-                    model="deepseek-chat", 
-                    messages=[{"role": "user", "content": prompt}], 
-                    stream=True,
-                    temperature=temperature
+                    model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=True, temperature=temperature
                 )
                 def stream_generator():
                     for chunk in response:
