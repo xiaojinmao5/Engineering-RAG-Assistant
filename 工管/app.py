@@ -14,11 +14,26 @@ st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    [data-testid="stSidebar"] { font-size: 14px; }
     
-    /* 【新增：强制固定侧边栏，隐藏收缩按钮】 */
+    /* 【强制固定侧边栏，隐藏收缩按钮】 */
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
+    
+    /* 【核心：加宽侧边栏，并隐藏滚动条】 */
+    [data-testid="stSidebar"] {
+        width: 320px !important;
+        min-width: 320px !important;
+    }
+    /* 隐藏侧边栏的上下滚动条 */
+    [data-testid="stSidebar"] ::-webkit-scrollbar {
+        display: none;
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        padding-left: 1.2rem;
+        padding-right: 1.2rem;
+        padding-top: 2rem;
+        font-size: 14px;
+    }
     
     /* 历史记录样式 */
     .history-item { margin-bottom: 12px; padding: 8px 0 8px 10px; font-size: 13px; line-height: 1.5; }
@@ -158,11 +173,12 @@ with st.sidebar:
             
     st.divider()
     
-    st.caption("💡 **架构配置**")
-    st.caption("• **大语言模型**: DeepSeek-chat")
-    st.caption("• **向量模型**: 智谱 embedding-3")
-    st.caption("• **检索策略**: 混合召回 (向量+BM25) 获取 Top-10")
-    st.caption("• **精排机制**: BGE-Reranker 重排获取 Top-3")
+    # 【文字再精简一点，绝对不换行】
+    st.caption("💡 **底层架构**")
+    st.caption("• **LLM**: DeepSeek-chat")
+    st.caption("• **向量**: 智谱 embedding-3")
+    st.caption("• **召回**: 混合检索 (Top-10)")
+    st.caption("• **精排**: BGE-Reranker (Top-3)")
 
 # --- 欢迎语 ---
 if len(st.session_state.messages) == 0:
