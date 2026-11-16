@@ -15,7 +15,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 隐藏主页面和侧边栏的所有滚动条（但保留鼠标滚轮功能） */
+    /* 隐藏主页面和侧边栏的滚动条 */
     ::-webkit-scrollbar { width: 0px; background: transparent; }
     
     /* 强制固定侧边栏宽度 */
@@ -23,24 +23,23 @@ st.markdown("""
         width: 320px !important;
         min-width: 320px !important;
     }
-    /* 取消侧边栏折叠按钮 */
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
     
-    /* 【极限压缩】干掉侧边栏内部的上下边距 */
+    /* 极限压缩侧边栏边距 */
     [data-testid="stSidebar"] > div:first-child {
         padding-top: 1.5rem;
         padding-bottom: 0rem;
         padding-left: 1rem;
         padding-right: 1rem;
     }
-    [data-testid="stSidebar"] .element-container { margin-bottom: 0.3rem; }
-    [data-testid="stSidebar"] hr { margin-top: 0.5rem; margin-bottom: 0.5rem; }
-    [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.5rem; }
+    [data-testid="stSidebar"] .element-container { margin-bottom: 0.2rem; }
+    [data-testid="stSidebar"] hr { margin-top: 0.4rem; margin-bottom: 0.4rem; }
+    [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem; }
     
-    /* 自定义超小号字体的架构配置 */
+    /* 【修改：去掉蓝色，改成深灰色】 */
     .tiny-config { font-size: 11px; color: #6B7280; line-height: 1.6; margin-top: 5px; }
-    .tiny-config span { color: #3B82F6; font-weight: 600; }
+    .tiny-config span { color: #374151; font-weight: 600; }
     
     /* 历史记录样式 */
     .history-item { margin-bottom: 8px; padding: 6px 0 6px 8px; font-size: 12px; line-height: 1.4; }
@@ -61,10 +60,14 @@ def load_data():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(current_dir, "data")
     all_text = ""
-    if not os.path.exists(data_dir): return []
+    file_list = []
+    if not os.path.exists(data_dir): return [], []
+    
     for filename in os.listdir(data_dir):
         file_path = os.path.join(data_dir, filename)
         if filename == "guifan.pdf": continue
+        file_list.append(filename)
+        
         if filename.endswith(".txt"):
             with open(file_path, "r", encoding="utf-8") as f:
                 all_text += f.read() + "\n"
@@ -76,10 +79,11 @@ def load_data():
                     text = page.extract_text()
                     if text: all_text += text + "\n"
             except Exception: pass
+            
     chunks = re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', all_text)
-    return [c.strip() for c in chunks if len(c.strip()) > 10]
+    return [c.strip() for c in chunks if len(c.strip()) > 10], file_list
 
-clean_chunks = load_data()
+clean_chunks, loaded_files = load_data()
 
 # ================= 2. 智谱 Embedding 与 向量库 =================
 class ZhipuEmbeddingFunction:
@@ -154,20 +158,42 @@ def rerank_chunks(query, chunks, top_n=3):
         st.warning(f"Reranker 降级处理：{e}")
         return chunks[:top_n] 
 
-# ================= 5. 侧边栏与记忆管理 =================
+# ================= 5. 侧边栏与交互 =================
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "quick_prompt" not in st.session_state:
+    st.session_state.quick_prompt = None
 
 with st.sidebar:
     st.caption("⚙️ **系统控制台**")
-    st.success(f"✅ 知识库就绪：{len(clean_chunks)} 个片段")
+    st.success(f"✅ 知识库：{len(clean_chunks)} 个片段")
     
+    # 1. 模型参数调节
+    st.caption("🎛️ **模型参数**")
+    temperature = st.slider("发散度 (Temperature)", min_value=0.0, max_value=1.0, value=0.2, step=0.1, help="越低越严谨（推荐工程场景），越高越有创造力。")
+
+    # 2. 知识库文件
+    with st.expander("📁 已加载知识库", expanded=False):
+        if loaded_files:
+            for file in loaded_files:
+                st.caption(f"📄 {file}")
+        else:
+            st.caption("暂无文件")
+
+    # 3. 快捷提问
+    st.caption("💡 **快捷提问**")
+    if st.button("外墙渗水保修几年？", use_container_width=True):
+        st.session_state.quick_prompt = "外墙渗水保修几年？"
+    if st.button("偷工减料会受什么处罚？", use_container_width=True):
+        st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
+
     if st.button("🗑️ 清空对话记忆", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
         
     st.divider()
     
+    # 4. 历史记忆
     with st.expander("📜 历史记忆回顾", expanded=False):
         if st.session_state.messages:
             for msg in st.session_state.messages:
@@ -180,7 +206,7 @@ with st.sidebar:
             
     st.divider()
     
-    # 【彻底解决字大换行的问题：使用自定义 HTML 小字】
+    # 5. 底层架构 (深灰色)
     st.markdown("""
     <div class="tiny-config">
     💡 <b>底层架构</b><br>
@@ -200,8 +226,14 @@ for msg in st.session_state.messages:
     avatar_img = USER_AVATAR if msg["role"] == "user" else AI_AVATAR
     st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
 
-# ================= 6. 主界面交互 =================
-if user_question := st.chat_input("例如：施工单位偷工减料会面临什么处罚？"):
+# ================= 6. 主界面逻辑 =================
+# 处理快捷按钮的输入
+user_question = st.chat_input("例如：施工单位偷工减料会面临什么处罚？")
+if st.session_state.quick_prompt:
+    user_question = st.session_state.quick_prompt
+    st.session_state.quick_prompt = None
+
+if user_question:
     st.session_state.messages.append({"role": "user", "content": user_question})
     st.chat_message("user", avatar=USER_AVATAR).write(user_question)
     
@@ -245,7 +277,10 @@ if user_question := st.chat_input("例如：施工单位偷工减料会面临什
 """
             try:
                 response = client.chat.completions.create(
-                    model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=True
+                    model="deepseek-chat", 
+                    messages=[{"role": "user", "content": prompt}], 
+                    stream=True,
+                    temperature=temperature # 新增：接入了滑块的参数
                 )
                 def stream_generator():
                     for chunk in response:
