@@ -56,16 +56,13 @@ class ZhipuEmbeddingFunction:
 # ================= 2. 初始化持久化向量库 =================
 current_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(current_dir, "data")
-db_dir = os.path.join(current_dir, "chroma_db") # 持久化目录
+db_dir = os.path.join(current_dir, "chroma_db") 
 
 if not os.path.exists(data_dir): os.makedirs(data_dir)
 
 @st.cache_resource
 def get_chroma_collection():
-    # 【核心升级：改用 PersistentClient 存到硬盘】
     client = chromadb.PersistentClient(path=db_dir)
-    
-    # 如果集合已经存在，直接加载，不用重新算
     try:
         collection = client.get_collection(name="engineering_rules", embedding_function=ZhipuEmbeddingFunction())
     except:
@@ -80,7 +77,7 @@ def add_to_vector_db(chunks):
     for i in range(0, len(chunks), 64):
         collection.add(documents=chunks[i:i+64], ids=ids[i:i+64])
 
-# ================= 3. 读取文件（只在数据库为空时执行） =================
+# ================= 3. 读取文件 =================
 @st.cache_data
 def load_static_data():
     all_text = ""
@@ -105,12 +102,10 @@ def load_static_data():
 
 static_chunks, loaded_files = load_static_data()
 
-# 判断：如果数据库里没数据，才去全量计算；如果有，直接秒过！
 if collection.count() == 0 and static_chunks:
     with st.spinner("首次启动，正在将文件向量化并存入硬盘..."):
         add_to_vector_db(static_chunks)
 
-# 获取所有文本，用于 BM25 关键词检索
 all_chunks = collection.get()["documents"]
 
 # ================= 4. 混合检索与 Reranker =================
@@ -155,16 +150,13 @@ with st.sidebar:
     with st.expander("📤 动态扩充知识库 (永久生效)", expanded=False):
         uploaded_file = st.file_uploader("拖拽上传新规范", type=['txt', 'pdf'])
         if uploaded_file:
-            # 检查是否已经上传过（通过文件名判断）
             if uploaded_file.name not in loaded_files:
                 with st.spinner("解析并写入硬盘..."):
                     text = ""
-                    # 1. 先保存到本地 data 文件夹
                     save_path = os.path.join(data_dir, uploaded_file.name)
                     with open(save_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                         
-                    # 2. 解析文本
                     if uploaded_file.name.endswith(".txt"):
                         text = uploaded_file.read().decode("utf-8")
                     elif uploaded_file.name.endswith(".pdf"):
@@ -175,7 +167,6 @@ with st.sidebar:
                                 if page.extract_text(): text += page.extract_text() + "\n"
                         except: pass
                         
-                    # 3. 切分并入库
                     if text:
                         new_chunks = [c.strip() for c in re.split(r'(?=第[一二三四五六七八九十百\d\.]+[条章])', text) if len(c.strip()) > 10]
                         add_to_vector_db(new_chunks)
@@ -187,6 +178,17 @@ with st.sidebar:
     with st.expander("💡 快捷提问", expanded=False):
         if st.button("外墙渗水保修几年？", use_container_width=True): st.session_state.quick_prompt = "外墙渗水保修几年？"
         if st.button("偷工减料会受什么处罚？", use_container_width=True): st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
+
+    # 【补回历史记录模块】
+    with st.expander("📜 历史记忆回顾", expanded=False):
+        if st.session_state.messages:
+            for msg in st.session_state.messages:
+                if msg["role"] == "user":
+                    st.markdown(f'<div class="history-item history-user"><span class="history-role">用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
+        else:
+            st.caption("暂无历史记录~")
 
     if st.button("🗑️ 清空对话记忆", use_container_width=True):
         st.session_state.messages = []
