@@ -23,8 +23,6 @@ st.markdown("""
     [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     .history-item { margin-bottom: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.4; border-radius: 4px;}
     .history-user { border-left: 3px solid #9CA3AF; color: #374151; background: #fff;}
-    .history-assistant { border-left: 3px solid #3B82F6; color: #374151; background: #fff;}
-    .history-role { font-weight: 600; font-size: 11px; margin-bottom: 2px; display: block; color: #6B7280; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -179,16 +177,23 @@ with st.sidebar:
         if st.button("外墙渗水保修几年？", use_container_width=True): st.session_state.quick_prompt = "外墙渗水保修几年？"
         if st.button("偷工减料会受什么处罚？", use_container_width=True): st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
 
-    # 【补回历史记录模块】
-    with st.expander("📜 历史记忆回顾", expanded=False):
-        if st.session_state.messages:
-            for msg in st.session_state.messages:
-                if msg["role"] == "user":
-                    st.markdown(f'<div class="history-item history-user"><span class="history-role">用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="history-item history-assistant"><span class="history-role">AI 助手</span>{msg["content"]}</div>', unsafe_allow_html=True)
-        else:
-            st.caption("暂无历史记录~")
+    st.divider()
+    
+    # 【核心修复：去掉外层折叠框，直接显示】
+    st.caption("📜 **历史记忆回顾**")
+    if st.session_state.messages:
+        recent_messages = st.session_state.messages[-4:] 
+        for i, msg in enumerate(recent_messages):
+            if msg["role"] == "user":
+                st.markdown(f'<div class="history-item history-user"><span class="history-role">用户</span>{msg["content"]}</div>', unsafe_allow_html=True)
+            else:
+                # 因为没有外层 expander 套着了，所以这个折叠框现在绝对生效！
+                with st.expander("🤖 点击查看 AI 回答"):
+                    st.write(msg["content"])
+    else:
+        st.caption("暂无历史记录~")
+
+    st.divider()
 
     if st.button("🗑️ 清空对话记忆", use_container_width=True):
         st.session_state.messages = []
