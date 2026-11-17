@@ -18,23 +18,19 @@ st.markdown("""
     footer {visibility: hidden;}
     ::-webkit-scrollbar { display: none !important; }
     
-    /* 【解除封印】不再强制宽度，把控制权还给系统，恢复鼠标拖拽 */
     [data-testid="stSidebar"] {
         background-color: #FAFAFA !important;
     }
-    
-    /* 隐藏折叠按钮，防止侧边栏被意外收起 */
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
-    
-    /* 侧边栏内边距微调 */
     [data-testid="stSidebarUserContent"] { padding: 1rem 0.8rem !important; }
     [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏗️ 工程规范与流程智能助手 (Agent 版)")
+# 【修改：主标题变小，去掉 Agent 版】
+st.markdown("<h1 style='font-size: 30px; margin-bottom: 20px;'>🏗️ 工程规范与流程智能助手</h1>", unsafe_allow_html=True)
 
 USER_AVATAR = "https://img.icons8.com/ios/50/6B7280/user--v1.png"
 AI_AVATAR = "https://img.icons8.com/ios/50/3B82F6/bot.png"
@@ -170,18 +166,19 @@ if "messages" not in st.session_state: st.session_state.messages = []
 if "quick_prompt" not in st.session_state: st.session_state.quick_prompt = None
 
 with st.sidebar:
-    st.caption("⚙️ **系统控制台**")
-    st.success(f"✅ 硬盘知识库：{len(all_chunks)} 个片段")
+    # 【修改：移到最顶部，并加上 Agent 版标记】
+    st.markdown("⚙️ **系统控制台 | Agent 版**")
     
-    # 【技术栈移至侧边栏，纵向排列】
     st.markdown("""
-    <div style="font-size: 12px; color: #6B7280; background-color: #F3F4F6; padding: 10px; border-radius: 8px; border-left: 3px solid #3B82F6; line-height: 1.6; margin-bottom: 15px;">
+    <div style="font-size: 12px; color: #6B7280; background-color: #F3F4F6; padding: 8px 10px; border-radius: 6px; border-left: 3px solid #3B82F6; line-height: 1.5; margin-bottom: 10px;">
         💡 <b>技术架构</b><br>
-        • <b>大模型:</b> DeepSeek (FC)<br>
+        • <b>大模型:</b> DeepSeek (Function Calling)<br>
         • <b>数据库:</b> Chroma (持久化)<br>
         • <b>检索:</b> 混合检索 + Reranker
     </div>
     """, unsafe_allow_html=True)
+    
+    st.success(f"✅ 硬盘知识库：{len(all_chunks)} 个片段")
     
     with st.expander("📤 动态扩充知识库 (永久生效)", expanded=False):
         uploaded_file = st.file_uploader("拖拽上传新规范", type=['txt', 'pdf'])
@@ -302,7 +299,6 @@ if user_question:
                                 delay_days=function_args.get("delay_days")
                             )
                             
-                            # 把算好的结果塞回给模型
                             messages.append({
                                 "tool_call_id": tool_call.id,
                                 "role": "tool",
@@ -310,7 +306,7 @@ if user_question:
                                 "content": function_response,
                             })
                     
-                    # 5. 第二轮请求：模型拿到计算结果，生成最终回答（流式）
+                    # 5. 第二轮请求：模型拿到计算结果，生成最终回答
                     second_response = client.chat.completions.create(
                         model="deepseek-chat",
                         messages=messages,
@@ -324,7 +320,7 @@ if user_question:
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 
                 else:
-                    # 如果没调用工具，说明是常规问题，直接走 RAG 流式回答
+                    # 如果没调用工具，走 RAG 流式回答
                     messages[0]["content"] += f"\n\n【参考规范】\n{context}"
                     stream_res = client.chat.completions.create(
                         model="deepseek-chat", messages=messages, stream=True, temperature=temperature
