@@ -17,9 +17,17 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     ::-webkit-scrollbar { display: none !important; }
-    [data-testid="stSidebar"] { background-color: #FAFAFA !important; }
+    
+    /* 【解除封印】不再强制宽度，把控制权还给系统，恢复鼠标拖拽 */
+    [data-testid="stSidebar"] {
+        background-color: #FAFAFA !important;
+    }
+    
+    /* 隐藏折叠按钮，防止侧边栏被意外收起 */
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
+    
+    /* 侧边栏内边距微调 */
     [data-testid="stSidebarUserContent"] { padding: 1rem 0.8rem !important; }
     [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem !important; }
@@ -27,14 +35,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏗️ 工程规范与流程智能助手 (Agent 版)")
-
-st.markdown("""
-<div style="font-size: 13px; color: #6B7280; margin-bottom: 25px; background-color: #F9FAFB; padding: 10px; border-radius: 8px; border-left: 4px solid #3B82F6;">
-    💡 <b>大模型:</b> DeepSeek (Function Calling) &nbsp;|&nbsp; 
-    <b>数据库:</b> Chroma (持久化) &nbsp;|&nbsp; 
-    <b>检索:</b> 混合检索 + Reranker 精排
-</div>
-""", unsafe_allow_html=True)
 
 USER_AVATAR = "https://img.icons8.com/ios/50/6B7280/user--v1.png"
 AI_AVATAR = "https://img.icons8.com/ios/50/3B82F6/bot.png"
@@ -45,7 +45,6 @@ def calculate_penalty(contract_amount: float, penalty_rate: float, delay_days: i
     penalty = contract_amount * penalty_rate * delay_days
     return f"计算结果：违约金总额为 {penalty:.2f} 万元。"
 
-# 告诉大模型我们有哪些工具可用
 tools = [
     {
         "type": "function",
@@ -174,6 +173,16 @@ with st.sidebar:
     st.caption("⚙️ **系统控制台**")
     st.success(f"✅ 硬盘知识库：{len(all_chunks)} 个片段")
     
+    # 【技术栈移至侧边栏，纵向排列】
+    st.markdown("""
+    <div style="font-size: 12px; color: #6B7280; background-color: #F3F4F6; padding: 10px; border-radius: 8px; border-left: 3px solid #3B82F6; line-height: 1.6; margin-bottom: 15px;">
+        💡 <b>技术架构</b><br>
+        • <b>大模型:</b> DeepSeek (FC)<br>
+        • <b>数据库:</b> Chroma (持久化)<br>
+        • <b>检索:</b> 混合检索 + Reranker
+    </div>
+    """, unsafe_allow_html=True)
+    
     with st.expander("📤 动态扩充知识库 (永久生效)", expanded=False):
         uploaded_file = st.file_uploader("拖拽上传新规范", type=['txt', 'pdf'])
         if uploaded_file:
@@ -265,7 +274,7 @@ if user_question:
             ]
 
             try:
-                # 3. 第一轮请求：让模型判断是否调用工具 (此处用非流式，方便处理工具调用)
+                # 3. 第一轮请求：让模型判断是否调用工具
                 response = client.chat.completions.create(
                     model="deepseek-chat", 
                     messages=messages, 
@@ -301,7 +310,7 @@ if user_question:
                                 "content": function_response,
                             })
                     
-                    # 5. 第二轮请求：模型拿到计算结果，生成最终回答（这次用流式输出）
+                    # 5. 第二轮请求：模型拿到计算结果，生成最终回答（流式）
                     second_response = client.chat.completions.create(
                         model="deepseek-chat",
                         messages=messages,
@@ -315,7 +324,7 @@ if user_question:
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 
                 else:
-                    # 如果没调用工具，说明是常规问题，直接走 RAG 流式回答（为了打字机效果）
+                    # 如果没调用工具，说明是常规问题，直接走 RAG 流式回答
                     messages[0]["content"] += f"\n\n【参考规范】\n{context}"
                     stream_res = client.chat.completions.create(
                         model="deepseek-chat", messages=messages, stream=True, temperature=temperature
