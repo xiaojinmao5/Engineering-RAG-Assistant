@@ -7,6 +7,7 @@ from zhipuai import ZhipuAI
 import jieba
 import requests
 import io
+import json
 
 # ================= 0. 页面与全局 CSS =================
 st.set_page_config(page_title="工程规范智能助手", page_icon="🏗️", layout="wide")
@@ -16,38 +17,55 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     ::-webkit-scrollbar { display: none !important; }
-    
-    /* 【解除封印】不再强制宽度，把控制权还给系统，恢复鼠标拖拽 */
-    [data-testid="stSidebar"] {
-        background-color: #FAFAFA !important;
-    }
-    
-    /* 隐藏折叠按钮，防止侧边栏被意外收起 */
+    [data-testid="stSidebar"] { background-color: #FAFAFA !important; }
     [data-testid="stSidebarCollapseButton"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
-    
-    /* 侧边栏内边距微调 */
     [data-testid="stSidebarUserContent"] { padding: 1rem 0.8rem !important; }
     [data-testid="stSidebar"] .element-container { margin-bottom: 0.4rem !important; }
     [data-testid="stSidebar"] [data-testid="stExpander"] { margin-bottom: 0.4rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🏗️ 工程规范与流程智能助手")
+st.title("🏗️ 工程规范与流程智能助手 (Agent 版)")
 
 st.markdown("""
 <div style="font-size: 13px; color: #6B7280; margin-bottom: 25px; background-color: #F9FAFB; padding: 10px; border-radius: 8px; border-left: 4px solid #3B82F6;">
-    💡 <b>底层架构:</b> DeepSeek-chat &nbsp;|&nbsp; 
+    💡 <b>大模型:</b> DeepSeek (Function Calling) &nbsp;|&nbsp; 
     <b>数据库:</b> Chroma (持久化) &nbsp;|&nbsp; 
-    <b>召回:</b> 混合检索 &nbsp;|&nbsp; 
-    <b>精排:</b> BGE-Reranker
+    <b>检索:</b> 混合检索 + Reranker 精排
 </div>
 """, unsafe_allow_html=True)
 
 USER_AVATAR = "https://img.icons8.com/ios/50/6B7280/user--v1.png"
 AI_AVATAR = "https://img.icons8.com/ios/50/3B82F6/bot.png"
 
-# ================= 1. 智谱 Embedding 函数 =================
+# ================= 1. Agent 工具定义 =================
+def calculate_penalty(contract_amount: float, penalty_rate: float, delay_days: int):
+    """计算工程延期违约金"""
+    penalty = contract_amount * penalty_rate * delay_days
+    return f"计算结果：违约金总额为 {penalty:.2f} 万元。"
+
+# 告诉大模型我们有哪些工具可用
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_penalty",
+            "description": "计算工程合同延期违约金。当用户询问涉及金额计算、违约金、赔偿金的问题时，必须调用此工具。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_amount": {"type": "number", "description": "合同总金额，单位万元"},
+                    "penalty_rate": {"type": "number", "description": "每日违约金比例，小数形式，如 0.1% 应传 0.001"},
+                    "delay_days": {"type": "integer", "description": "延误天数"}
+                },
+                "required": ["contract_amount", "penalty_rate", "delay_days"]
+            }
+        }
+    }
+]
+
+# ================= 2. 智谱 Embedding 函数 =================
 class ZhipuEmbeddingFunction:
     def __init__(self):
         self.client = ZhipuAI(api_key=os.environ.get("ZHIPU_API_KEY"))
@@ -58,7 +76,7 @@ class ZhipuEmbeddingFunction:
     def name(self) -> str: return f"zhipuai/{self.model_name}"
     def get_config(self) -> dict: return {"model": self.model_name}
 
-# ================= 2. 初始化持久化向量库 =================
+# ================= 3. 初始化持久化向量库 =================
 current_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(current_dir, "data")
 db_dir = os.path.join(current_dir, "chroma_db") 
@@ -82,7 +100,7 @@ def add_to_vector_db(chunks):
     for i in range(0, len(chunks), 64):
         collection.add(documents=chunks[i:i+64], ids=ids[i:i+64])
 
-# ================= 3. 读取文件 =================
+# ================= 4. 读取文件 =================
 @st.cache_data
 def load_static_data():
     all_text = ""
@@ -111,14 +129,13 @@ if collection.count() == 0 and static_chunks:
     with st.spinner("首次启动，正在将文件向量化并存入硬盘..."):
         add_to_vector_db(static_chunks)
 
-# 新增缓存，把数据存在内存里，不要每次都去硬盘读
 @st.cache_data
 def get_all_chunks():
     return collection.get()["documents"]
 
 all_chunks = get_all_chunks()
 
-# ================= 4. 混合检索与 Reranker =================
+# ================= 5. 混合检索与 Reranker =================
 def hybrid_search(query, k=10): 
     if not all_chunks: return []
     jieba.add_word('防渗漏'); jieba.add_word('保修期')
@@ -149,7 +166,7 @@ def rerank_chunks(query, chunks, top_n=3):
     except Exception:
         return chunks[:top_n] 
 
-# ================= 5. 侧边栏 =================
+# ================= 6. 侧边栏 =================
 if "messages" not in st.session_state: st.session_state.messages = []
 if "quick_prompt" not in st.session_state: st.session_state.quick_prompt = None
 
@@ -188,6 +205,7 @@ with st.sidebar:
     with st.expander("💡 快捷提问", expanded=False):
         if st.button("外墙渗水保修几年？", use_container_width=True): st.session_state.quick_prompt = "外墙渗水保修几年？"
         if st.button("偷工减料会受什么处罚？", use_container_width=True): st.session_state.quick_prompt = "施工单位偷工减料会面临什么处罚？"
+        if st.button("帮我算算违约金", use_container_width=True): st.session_state.quick_prompt = "合同价500万，延误了45天，每日违约金比例是0.1%，需要赔多少钱？"
 
     st.caption("📜 **历史记忆回顾**")
     if st.session_state.messages:
@@ -213,15 +231,15 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# ================= 6. 主界面交互 =================
+# ================= 7. 主界面与 Agent 交互 =================
 if len(st.session_state.messages) == 0:
-    st.info("👋 你好！我是工程规范智能助手。你可以问我规范问题。")
+    st.info("👋 你好！我是工程规范智能助手。你可以问我规范问题，也可以让我帮你算违约金。")
 
 for msg in st.session_state.messages:
     avatar_img = USER_AVATAR if msg["role"] == "user" else AI_AVATAR
     st.chat_message(msg["role"], avatar=avatar_img).write(msg["content"])
 
-user_question = st.chat_input("例如：施工单位偷工减料会面临什么处罚？")
+user_question = st.chat_input("例如：合同500万，延误45天，每日违约金0.1%，要赔多少？")
 if st.session_state.quick_prompt:
     user_question = st.session_state.quick_prompt
     st.session_state.quick_prompt = None
@@ -231,55 +249,87 @@ if user_question:
     st.chat_message("user", avatar=USER_AVATAR).write(user_question)
     
     with st.chat_message("assistant", avatar=AI_AVATAR):
-        with st.spinner("正在检索、重排并思考..."):
+        with st.spinner("Agent 正在思考..."):
             client = OpenAI(api_key=os.environ.get("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
             
+            # 1. 先跑常规 RAG 检索
             search_query = user_question
-            if len(st.session_state.messages) > 1:
-                history = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-4:-1]])
-                rewrite_prompt = f"根据历史对话，将最新追问改写为独立搜索句，直接输出问题。\n历史对话：\n{history}\n最新追问：{user_question}"
-                try:
-                    rw_res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": rewrite_prompt}])
-                    search_query = rw_res.choices[0].message.content.strip()
-                    st.caption(f"💡 结合上下文，系统正在检索：**{search_query}**")
-                except Exception: pass
-            
             raw_chunks = hybrid_search(search_query, k=10) 
             retrieved_chunks = rerank_chunks(search_query, raw_chunks, top_n=3) 
-            
             context = "\n\n".join(retrieved_chunks)
             
-            history_text = ""
-            for msg in st.session_state.messages[-5:-1]:
-                history_text += f"{'用户' if msg['role'] == 'user' else '助手'}: {msg['content']}\n"
+            # 2. 构建包含工具定义的对话
+            messages = [
+                {"role": "system", "content": f"你是工程助手。请参考规范回答问题：\n{context}\n如果涉及金额计算，必须调用 calculate_penalty 工具，不要自己瞎算。"},
+                {"role": "user", "content": user_question}
+            ]
 
-            prompt = f"""你是一个专业的工程管理助手。
-请结合【历史对话】和【参考规范】回答用户的问题。如果规范中没有答案，请回答“未在知识库中找到”。
-回答完毕后，务必在末尾加上引用来源。
-
-【历史对话】
-{history_text}
-
-【参考规范】
-{context}
-
-【当前用户问题】
-{search_query}
-"""
             try:
+                # 3. 第一轮请求：让模型判断是否调用工具 (此处用非流式，方便处理工具调用)
                 response = client.chat.completions.create(
-                    model="deepseek-chat", messages=[{"role": "user", "content": prompt}], stream=True, temperature=temperature
+                    model="deepseek-chat", 
+                    messages=messages, 
+                    tools=tools,
+                    tool_choice="auto", 
+                    temperature=temperature
                 )
-                def stream_generator():
-                    for chunk in response:
-                        if chunk.choices[0].delta.content:
-                            yield chunk.choices[0].delta.content
                 
-                answer = st.write_stream(stream_generator())
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+                response_message = response.choices[0].message
+                tool_calls = response_message.tool_calls
+
+                # 4. 如果模型决定调用工具
+                if tool_calls:
+                    st.caption("🛠️ **Agent 发现需要精准计算，正在调用【违约金计算器】...**")
+                    messages.append(response_message) 
+                    
+                    for tool_call in tool_calls:
+                        function_name = tool_call.function.name
+                        function_args = json.loads(tool_call.function.arguments)
+                        
+                        if function_name == "calculate_penalty":
+                            function_response = calculate_penalty(
+                                contract_amount=function_args.get("contract_amount"),
+                                penalty_rate=function_args.get("penalty_rate"),
+                                delay_days=function_args.get("delay_days")
+                            )
+                            
+                            # 把算好的结果塞回给模型
+                            messages.append({
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": function_response,
+                            })
+                    
+                    # 5. 第二轮请求：模型拿到计算结果，生成最终回答（这次用流式输出）
+                    second_response = client.chat.completions.create(
+                        model="deepseek-chat",
+                        messages=messages,
+                        stream=True
+                    )
+                    def tool_stream():
+                        for chunk in second_response:
+                            if chunk.choices[0].delta.content:
+                                yield chunk.choices[0].delta.content
+                    answer = st.write_stream(tool_stream())
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                
+                else:
+                    # 如果没调用工具，说明是常规问题，直接走 RAG 流式回答（为了打字机效果）
+                    messages[0]["content"] += f"\n\n【参考规范】\n{context}"
+                    stream_res = client.chat.completions.create(
+                        model="deepseek-chat", messages=messages, stream=True, temperature=temperature
+                    )
+                    def normal_stream():
+                        for chunk in stream_res:
+                            if chunk.choices[0].delta.content:
+                                yield chunk.choices[0].delta.content
+                    answer = st.write_stream(normal_stream())
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+
             except Exception as e:
-                st.error(f"模型调用失败: {e}")
+                st.error(f"Agent 执行失败: {e}")
                 
-            with st.expander("📚 查看重排后精选的原文依据"):
+            with st.expander("📚 查看参考的规范原文"):
                 for i, chunk in enumerate(retrieved_chunks):
                     st.info(f"**参考片段 {i+1}：**\n{chunk}")
